@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+build/
+dist/
+bin/
+.buildozer/
+*.spec.bak
+packaging/debroot/
+packaging/*.deb
+packaging/cordova-build/
+*.log
+datos/

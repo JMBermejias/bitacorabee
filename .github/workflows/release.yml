@@ -1,0 +1,133 @@
+name: Build Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: auto-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Resolve version
+        id: ver
+        run: |
+          python .github/workflows/bump_version.py
+          echo "version=$(cat .VERSION)" >> "$GITHUB_OUTPUT"
+      - name: Commit version bump (if any)
+        run: |
+          git config user.name "JMBermejias"
+          git config user.email "JMBermejias@users.noreply.github.com"
+          if [ -n "$(git status --porcelain .VERSION)" ]; then
+            git add .VERSION
+            git commit -m "auto: versión v$(cat .VERSION)"
+            git push origin main
+          fi
+
+  linux-deb:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set version
+        run: echo "${{ needs.version.outputs.version }}" > .VERSION
+      - name: Build .deb
+        run: bash packaging/build_deb.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: packaging/*.deb
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Set version
+        run: echo "${{ needs.version.outputs.version }}" > .VERSION
+      - name: Build APK (Cordova)
+        run: bash packaging/build_apk.sh
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/*.apk
+
+  release:
+    needs: [version, linux-deb, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create and push tag
+        run: |
+          git config user.name "JMBermejias"
+          git config user.email "JMBermejias@users.noreply.github.com"
+          V=${{ needs.version.outputs.version }}
+          git tag "v$V"
+          git push origin "v$V"
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: Bitácora BEE v${{ needs.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            ## Bitácora BEE v${{ needs.version.outputs.version }}
+
+            Registro de revisiones de apiario (versión web, sin Kivy).
+
+            ### Archivos
+            - **bitacorabee_${{ needs.version.outputs.version }}_amd64.deb** — Linux (Debian/Ubuntu/Zorin)
+            - **bitacorabee-v${{ needs.version.outputs.version }}-android.apk** — Android (instalación directa)
+
+            ### Instalación en Linux
+            ```
+            sudo apt install ./bitacorabee_${{ needs.version.outputs.version }}_amd64.deb
+            bitacorabee
+            ```
+            La aplicación se abre en el navegador y guarda los datos en
+            `~/.bitacorabee/bitacorabee.json`. Solo necesita Python 3.
+
+            ### Instalación en Android
+            Instala el `.apk` en el teléfono (permite "orígenes desconocidos").
+            Los datos se guardan en el propio dispositivo; usa
+            «Exportar JSON» para llevartelos a otro equipo e «Importar JSON»
+            para recuperarlos.
+
+            ### Créditos
+            - Autor: Jose Manuel Bernabeu Mejias
+            - Dirección: Calle Médico Rafael Navarro 2, 2C — Novelda 03660 Alicante
+            - Correo: apicolanovelda@gmail.com
+          files: |
+            artifacts/linux-deb/*.deb
+            artifacts/android/*.apk

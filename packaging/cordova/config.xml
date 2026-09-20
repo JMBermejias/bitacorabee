@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="es.bitacorabee.app" version="@VERSION@" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>Bitácora BEE</name>
+    <description>Registro de revisiones de apiario</description>
+    <author email="apicolanovelda@gmail.com" href="https://github.com/JMBermejias/bitacorabee">
+        Jose Manuel Bernabeu Mejias
+    </author>
+    <content src="index.html" />
+    <preference name="Orientation" value="default" />
+    <preference name="BackgroundColor" value="#f4f2ea" />
+    <preference name="AndroidWindowSplashScreenBackground" value="#f2b705" />
+    <platform name="android">
+        <preference name="AndroidXEnabled" value="true" />
+        <preference name="android-minSdkVersion" value="24" />
+        <preference name="android-targetSdkVersion" value="34" />
+    </platform>
+</widget>

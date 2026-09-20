@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bitácora BEE · Control de apiario</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="marca">
+    <span class="logo">B</span>
+    <div class="marca-textos">
+      <h1>Bitácora BEE</h1>
+      <p>Registro de revisiones de apiario · MIEL 100% NATURAL</p>
+    </div>
+  </div>
+  <div class="acciones">
+    <label class="campo-select mini" for="selector-visita">
+      <span>Revisión</span>
+      <select id="selector-visita"></select>
+    </label>
+    <button id="btn-hojas" class="btn btn-claro" title="Ver y gestionar todas las revisiones guardadas">Hojas</button>
+    <button id="btn-nueva" class="btn btn-claro" title="Crear una nueva revisión en blanco">Nueva</button>
+    <button id="btn-guardar" class="btn btn-verde">Guardar</button>
+    <button id="btn-imprimir" class="btn btn-azul" title="Genera la hoja impresa">Imprimir hoja</button>
+  </div>
+</header>
+
+<main class="contenido">
+
+  <!-- 1 · DATOS GENERALES -->
+  <section class="tarjeta">
+    <div class="titulo-seccion">
+      <span class="num-seccion">1</span>
+      <h2>Datos Generales</h2>
+    </div>
+    <div class="grid-datos" id="grid-datos">
+      <div class="campo">
+        <label for="d-apiario">Apiario</label>
+        <input id="d-apiario" type="text" placeholder="Nombre del apiario">
+      </div>
+      <div class="campo">
+        <label for="d-ubicacion">Ubicación</label>
+        <input id="d-ubicacion" type="text" placeholder="Paraje, término municipal…">
+      </div>
+      <div class="campo">
+        <label for="d-fecha">Fecha</label>
+        <input id="d-fecha" type="date">
+      </div>
+      <div class="campo">
+        <label for="d-hora">Hora</label>
+        <input id="d-hora" type="time">
+      </div>
+      <div class="campo">
+        <label for="d-clima">Clima</label>
+        <select id="d-clima">
+          <option>Soleado</option>
+          <option>Parcialmente nublado</option>
+          <option>Nublado</option>
+          <option>Lluvioso</option>
+          <option>Tormenta</option>
+          <option>Cálido</option>
+          <option>Frío</option>
+          <option>Ventoso</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="d-responsable">Responsable</label>
+        <input id="d-responsable" type="text" placeholder="Persona que revisa">
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · REGISTRO DE REVISIÓN POR COLMENA -->
+  <section class="tarjeta">
+    <div class="titulo-seccion">
+      <span class="num-seccion">2</span>
+      <h2>Registro de Revisión por Colmena</h2>
+    </div>
+    <div class="barra-tabla">
+      <button id="btn-anadir" class="btn btn-ambar">+ Añadir colmena</button>
+      <button id="btn-eliminar" class="btn btn-rojo">− Eliminar última</button>
+      <span class="pista">Desliza la tabla para ver todas las columnas</span>
+    </div>
+    <div class="tabla-envoltorio">
+      <table class="tabla-colmenas" id="tabla-colmenas">
+        <thead id="thead-colmenas"></thead>
+        <tbody id="tbody-colmenas"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3 · ACTIVIDADES REALIZADAS -->
+  <section class="tarjeta">
+    <div class="titulo-seccion">
+      <span class="num-seccion">3</span>
+      <h2>Actividades Realizadas</h2>
+    </div>
+    <div class="lista-actividades" id="lista-actividades"></div>
+    <div class="campo">
+      <label for="d-otras">Otras actividades / Observaciones generales</label>
+      <textarea id="d-otras" rows="3" placeholder="Describe cualquier otra actividad realizada en esta visita…"></textarea>
+    </div>
+  </section>
+
+  <!-- 4 · PRÓXIMA REVISIÓN -->
+  <section class="tarjeta">
+    <div class="titulo-seccion">
+      <span class="num-seccion">4</span>
+      <h2>Próxima Revisión</h2>
+    </div>
+    <div class="grid-proxima">
+      <div class="campo">
+        <label for="p-fecha">Fecha programada</label>
+        <input id="p-fecha" type="date">
+      </div>
+      <div class="campo">
+        <label for="p-actividades">Actividades pendientes</label>
+        <textarea id="p-actividades" rows="3" placeholder="Qué hay que hacer en la próxima visita…"></textarea>
+      </div>
+      <div class="campo">
+        <label for="p-notas">Notas adicionales</label>
+        <textarea id="p-notas" rows="3" placeholder="Comentarios generales…"></textarea>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="pie">
+  <span id="estado-guardado">Listo.</span>
+  <span id="version-app"></span>
+</footer>
+
+<!-- Hoja imprimible (solo visible al imprimir) -->
+<div id="hoja-impresion" class="hoja-impresion"></div>
+
+<!-- Ventana de hojas guardadas -->
+<div id="modal-hojas" class="modal-fondo" hidden>
+  <div class="modal">
+    <div class="modal-cab">
+      <div>
+        <h2>Hojas guardadas</h2>
+        <p>Todas las revisiones de la bitácora</p>
+      </div>
+      <button id="btn-cerrar-hojas" class="btn btn-claro">Cerrar</button>
+    </div>
+    <div class="modal-cuerpo">
+      <table class="tabla-hojas">
+        <thead>
+          <tr>
+            <th>Revisión</th>
+            <th>Apiario</th>
+            <th>Responsable</th>
+            <th>Colm.</th>
+            <th>Modificada</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-hojas"></tbody>
+      </table>
+      <p id="sin-hojas" class="vacio">Todavía no hay hojas guardadas.</p>
+    </div>
+    <div class="modal-pie">
+      <button id="btn-nueva-hoja" class="btn btn-ambar">+ Nueva revisión</button>
+      <button id="btn-exportar" class="btn btn-claro">Exportar JSON</button>
+      <button id="btn-importar" class="btn btn-claro">Importar JSON</button>
+      <input id="file-importar" type="file" accept=".json,application/json" hidden>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
