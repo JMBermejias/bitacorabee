@@ -10,7 +10,8 @@ if [ -z "$VERSION" ]; then
   echo "ERROR: .VERSION vacío" >&2
   exit 1
 fi
-APP=".."
+APP=$(cd .. && pwd)
+DIST="$APP/dist"
 
 echo "==> Bitácora BEE $VERSION - APK Android"
 echo "    JAVA_HOME=${JAVA_HOME:-(vacío)}"
@@ -22,8 +23,8 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "==> Preparando proyecto Cordova"
-rm -rf cordova-build "$APP/dist"
-mkdir -p cordova-build/www "$APP/dist"
+rm -rf cordova-build
+mkdir -p cordova-build/www "$DIST"
 
 cp "$APP"/index.html "$APP"/app.js "$APP"/styles.css cordova-build/www/
 sed -e "s/@VERSION@/$VERSION/" cordova/config.xml > cordova-build/config.xml
@@ -46,6 +47,6 @@ if [ ! -f "$APK" ]; then
 fi
 
 echo "==> Copiando APK"
-cp "$APK" "$APP/dist/bitacorabee-v${VERSION}-android.apk"
-ls -lh "$APP/dist/"*.apk
-echo "OK: $APP/dist/bitacorabee-v${VERSION}-android.apk"
+cp "$APK" "$DIST/bitacorabee-v${VERSION}-android.apk"
+ls -lh "$DIST"/*.apk
+echo "OK: $DIST/bitacorabee-v${VERSION}-android.apk"
