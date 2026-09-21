@@ -47,6 +47,9 @@ let usuarioActivo = null;     /* operador activo (se usa como responsable) */
 let editandoUsuario = null;   /* id del operador que se está editando */
 let servidorSync = "";        /* dirección (IP:puerto) del servidor con el que sincronizar */
 let infoActualizacion = null; /* última información de actualización consultada */
+let sucioDoc = false;         /* hay cambios locales sin guardar */
+let sincronizando = false;    /* evita solaparse las sincronizaciones */
+let timerAutoSync = null;     /* intervalo de sincronización automática */
 
 /* ------------------------------------------------------------------ */
 /* utilidades                                                          */
@@ -244,7 +247,7 @@ function leerFormulario() {
     v.proxima_revision[clave] = nodo ? nodo.value : "";
   });
 
-  v.actualizada = new Date().toISOString();
+  if (sucioDoc) v.actualizada = new Date().toISOString();
   return v;
 }
 
@@ -287,6 +290,7 @@ async function guardar(mensajeDeExito, abrirHojas) {
   leerFormulario();
   doc.actualizada_doc = new Date().toISOString();
   guardarLocalCopia();
+  sucioDoc = false;
   if (localMode) {
     renderizarSelector();
     estado(mensajeDeExito || "Guardado en este dispositivo.");
@@ -310,6 +314,7 @@ async function guardar(mensajeDeExito, abrirHojas) {
 }
 
 function marcarAutoguardado() {
+  sucioDoc = true;
   if (timerAutoguardado) clearTimeout(timerAutoguardado);
   timerAutoguardado = setTimeout(() => {
     estado("Guardando…");
@@ -937,6 +942,7 @@ async function usarEsteAparatoComoServidor() {
     servidorSync = `${ip}:${puerto}`;
     $("sync-direccion").value = servidorSync;
     guardarUsuarios();
+    arrancarAutoSync();
     estado(`Servidor de sincronización: ${servidorSync}.`);
   } catch (e) {
     alert("No se pudo averiguar la dirección de este ordenador.");
@@ -948,11 +954,13 @@ function guardarDireccionSync() {
   if (!dir) {
     servidorSync = "";
     guardarUsuarios();
+    arrancarAutoSync();
     estado("Dirección de sincronización borrada.");
     return;
   }
   servidorSync = dir;
   guardarUsuarios();
+  arrancarAutoSync();
   estado(`Dirección de sincronización guardada: ${dir}.`);
 }
 
@@ -980,6 +988,7 @@ function fusionarDocs(local, remoto) {
 
 async function persistirDoc() {
   guardarLocalCopia();
+  sucioDoc = false;
   if (localMode) return;
   try {
     await fetch(ESTADO_JSON, {
@@ -992,49 +1001,78 @@ async function persistirDoc() {
   }
 }
 
-async function sincronizar() {
-  const u = usuarioActual();
-  leerFormulario();
-  const dir = normalizarDireccion(servidorSync);
-  if (!dir) {
-    estado("Indica la dirección del servidor con el que sincronizar.");
-    abrirModalUsuarios();
-    setTimeout(() => { try { $("sync-direccion").focus(); } catch (e) { /* ignorar */ } }, 50);
-    return;
-  }
-  const base = "http://" + dir;
-  estado(`Sincronizando con ${dir}…`);
+async function sincronizar(silencio) {
+  if (sincronizando) return;
+  sincronizando = true;
   try {
-    const resp = await fetch(base + "/api/datos", { cache: "no-store" });
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    const remoto = await resp.json();
-    if (!remoto || !Array.isArray(remoto.visitas)) {
-      throw new Error("El servidor no devolvió una bitácora válida");
+    const u = usuarioActual();
+    leerFormulario();
+    const dir = normalizarDireccion(servidorSync);
+    if (!dir) {
+      if (!silencio) {
+        estado("Indica la dirección del servidor con el que sincronizar.");
+        abrirModalUsuarios();
+        setTimeout(() => { try { $("sync-direccion").focus(); } catch (e) { /* ignorar */ } }, 50);
+      }
+      return;
     }
-    const fusionado = fusionarDocs(doc, remoto);
-    const hayCambio = JSON.stringify(fusionado) !== JSON.stringify(doc);
-    if (hayCambio) {
-      doc = fusionado;
-      await persistirDoc();
-      renderizarSelector();
-      rellenarFormulario();
+    const base = "http://" + dir;
+    if (!silencio) estado(`Sincronizando con ${dir}…`);
+    const hora = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    try {
+      const resp = await fetch(base + "/api/datos", { cache: "no-store" });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const remoto = await resp.json();
+      if (!remoto || !Array.isArray(remoto.visitas)) {
+        throw new Error("El servidor no devolvió una bitácora válida");
+      }
+      const fusionado = fusionarDocs(doc, remoto);
+      const hayLocal = JSON.stringify(fusionado) !== JSON.stringify(doc);
+      const hayRemoto = JSON.stringify(fusionado) !== JSON.stringify(remoto);
+      if (!hayLocal && !hayRemoto) {
+        if (!silencio) estado(`Sincronizado con ${dir}, sin cambios (${hora()}).`);
+        return;
+      }
+      if (hayLocal) {
+        doc = fusionado;
+        await persistirDoc();
+        renderizarSelector();
+        rellenarFormulario();
+      }
+      const put = await fetch(base + "/api/datos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fusionado),
+      });
+      if (!put.ok) throw new Error("HTTP " + put.status);
+      estado(`Sincronizado con ${dir} (${hora()}).`);
+    } catch (e) {
+      if (silencio) return;
+      estado("Error de sincronización.");
+      alert(
+        `No se pudo sincronizar con ${dir}.\n\n${e.message}\n\n` +
+        "Comprueba que el servidor esté abierto, que ambos equipos estén en la misma red " +
+        "y que la dirección (IP:puerto) sea correcta."
+      );
     }
-    const put = await fetch(base + "/api/datos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(fusionado),
-    });
-    if (!put.ok) throw new Error("HTTP " + put.status);
-    const hora = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    estado(`Sincronizado con ${dir} (${hora}).`);
-  } catch (e) {
-    estado("Error de sincronización.");
-    alert(
-      `No se pudo sincronizar con ${dir}.\n\n${e.message}\n\n` +
-      "Comprueba que el servidor esté abierto, que ambos equipos estén en la misma red " +
-      "y que la dirección (IP:puerto) sea correcta."
-    );
+  } finally {
+    sincronizando = false;
   }
+}
+
+/* Sincronización automática: al arrancar y después cada 30 s si hay
+   dirección de servidor configurada. Calla mientras no haya cambios. */
+async function sincronizarAutomatica() {
+  if (sincronizando || !normalizarDireccion(servidorSync)) return;
+  try { await sincronizar(true); } catch (e) { /* sin conexión */ }
+}
+
+function arrancarAutoSync() {
+  if (timerAutoSync) clearInterval(timerAutoSync);
+  timerAutoSync = null;
+  if (!normalizarDireccion(servidorSync)) return;
+  setTimeout(sincronizarAutomatica, 3000);
+  timerAutoSync = setInterval(sincronizarAutomatica, 30000);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1243,6 +1281,7 @@ async function arrancar() {
   actualizarChipUsuarios();
   renderizarSelector();
   rellenarFormulario();
+  arrancarAutoSync();
   $("version-app").textContent = "";
   if (localMode) {
     if (APP_VERSION) $("version-app").textContent = "Bitácora BEE v" + APP_VERSION;

@@ -54,8 +54,10 @@ dispositivos (ordenador y móvil) en la misma red local:
    resto de dispositivos de la red.
 2. **Móvil**: abre **Usuarios**, escribe la dirección del ordenador
    (`IP:puerto`, ej. `192.168.1.10:8000`) y pulsa **Guardar dirección**.
-3. Pulsa **Sincronizar** en el móvil: las hojas se unen (fusionan) y quedan
-   en ambos dispositivos. La dirección se guarda y se puede volver a usar.
+3. Desde entonces **sincroniza automáticamente**: al abrir la app y cada
+   30 segundos mientras haya dirección guardada se intercambian las hojas
+   (fusionan) y quedan en ambos dispositivos. También puedes pulsar
+   **Sincronizar** en cualquier momento para forzarlo.
 4. También se puede sincronizar entre dos ordenadores de la misma red
    (en el segundo escribe la dirección del primero).
 
