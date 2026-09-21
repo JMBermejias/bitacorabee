@@ -92,6 +92,29 @@ def _version_nueva(actual, tag):
     return b > a
 
 
+def _ips_locales():
+    """Direcciones IP de la máquina en la red local (lo que ven otros)."""
+    ips = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip:
+            ips.append(ip)
+    except Exception:
+        pass
+    try:
+        for x in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if not x.startswith("127.") and x not in ips:
+                ips.append(x)
+    except Exception:
+        pass
+    if not ips:
+        ips.append("127.0.0.1")
+    return ips
+
+
 def _consulta_release():
     try:
         req = urllib.request.Request(URL_RELEASE, headers={"User-Agent": APP_NOMBRE})
@@ -263,8 +286,19 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(cuerpo)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.end_headers()
         self.wfile.write(cuerpo)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_GET(self):
         ruta = urlparse(self.path).path
@@ -289,6 +323,17 @@ class Handler(SimpleHTTPRequestHandler):
                     "notas": info.get("notas", ""),
                     "pagina": info.get("pagina", ""),
                     "error": info.get("error", ""),
+                },
+            )
+            return
+        if ruta == "/api/red":
+            self._json(
+                200,
+                {
+                    "ips": _ips_locales(),
+                    "puerto": self.server.server_address[1],
+                    "nombre": APP_NOMBRE,
+                    "version": _leer_version(),
                 },
             )
             return
@@ -380,6 +425,11 @@ def main():
             puerto = PUERTO_DEFECTO
     puerto = _puerto_libre(puerto)
 
+    # Se escucha en toda la red local (no solo en este equipo) para que el
+    # móvil u otros ordenadores puedan sincronizar. Para restringirlo:
+    # BITACORA_BIND=127.0.0.1
+    host = os.environ.get("BITACORA_BIND", "0.0.0.0")
+
     if not os.path.exists(FICHERO_DATOS):
         doc = _documento_vacio()
         nueva = _nueva_visita()
@@ -388,12 +438,18 @@ def main():
         _guardar_datos(doc)
         print("Creada bitácora inicial en:", FICHERO_DATOS)
 
-    servidor = ThreadingHTTPServer(("127.0.0.1", puerto), Handler)
+    servidor = ThreadingHTTPServer((host, puerto), Handler)
     url = f"http://127.0.0.1:{puerto}/"
     print()
     print("=" * 62)
     print(f"  {APP_NOMBRE} {VERSION} - Control de apiario (versión web)")
     print(f"  Abre en tu navegador: {url}")
+    if host == "0.0.0.0":
+        try:
+            for ip in _ips_locales():
+                print(f"  Otros dispositivos (móvil): http://{ip}:{puerto}/")
+        except Exception:
+            pass
     print(f"  Datos guardados en: {DATOS_DIR}")
     print("  Pulsa Ctrl+C para detener el servidor.")
     print("=" * 62)

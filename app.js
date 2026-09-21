@@ -29,7 +29,7 @@ const CLAVES_BASE = ["apiario", "ubicacion", "fecha", "hora", "clima", "responsa
 const CLAVES_PROX = ["fecha", "actividades_pendientes", "notas"];
 
 const ESTADO_JSON = "/api/datos"; /* ruta de la API donde se guarda */
-const GH_API = "https://api.github.com";
+const GH_API = "https://api.github.com"; /* solo se usa para comprobar actualizaciones (sin cuenta) */
 const GH_REPO_ORIGEN = "JMBermejias/bitacorabee";
 const CLAVE_USUARIOS = "bitacorabee_usuarios";
 const APP_VERSION =
@@ -42,9 +42,10 @@ let doc = null;               /* documento completo {visitas, actual} */
 let timerAutoguardado = null;
 let clavesAct = new Set();
 let localMode = false;        /* true si no hay servidor (p. ej. en Android) */
-let usuarios = [];            /* registro de usuarios de sincronización */
-let usuarioActivo = null;     /* usuario actualmente activo */
-let editandoUsuario = null;   /* id del usuario que se está editando */
+let usuarios = [];            /* operadores locales */
+let usuarioActivo = null;     /* operador activo (se usa como responsable) */
+let editandoUsuario = null;   /* id del operador que se está editando */
+let servidorSync = "";        /* dirección (IP:puerto) del servidor con el que sincronizar */
 let infoActualizacion = null; /* última información de actualización consultada */
 
 /* ------------------------------------------------------------------ */
@@ -682,26 +683,14 @@ function manejarImportar(ev) {
 }
 
 /* ------------------------------------------------------------------ */
-/* usuarios de sincronización                                          */
+/* operadores y sincronización local                                   */
 /* ------------------------------------------------------------------ */
-
-function b64Encode(texto) {
-  const bytes = new TextEncoder().encode(texto);
-  let bin = "";
-  bytes.forEach((b) => { bin += String.fromCharCode(b); });
-  return btoa(bin);
-}
-
-function b64Decode(b64) {
-  const bin = atob(b64);
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
 
 function armarioUsuarios() {
   return {
     usuarios,
     activo: usuarioActivo ? usuarioActivo.id : null,
+    servidor_sync: servidorSync,
   };
 }
 
@@ -714,7 +703,7 @@ async function guardarUsuarios() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(armarioUsuarios()),
     });
-  } catch (e) { /* el servidor no acepta usuarios: se siguen guardando en el dispositivo */ }
+  } catch (e) { /* el servidor no acepta: se guarda en el dispositivo */ }
 }
 
 async function cargarUsuarios() {
@@ -725,6 +714,7 @@ async function cargarUsuarios() {
         const j = await r.json();
         if (j && Array.isArray(j.usuarios)) {
           usuarios = j.usuarios;
+          servidorSync = j.servidor_sync || "";
           usuarioActivo = j.activo ? usuarios.find((u) => u.id === j.activo) || null : null;
           return;
         }
@@ -737,6 +727,7 @@ async function cargarUsuarios() {
       const j = JSON.parse(s);
       if (j && Array.isArray(j.usuarios)) {
         usuarios = j.usuarios;
+        servidorSync = j.servidor_sync || "";
         usuarioActivo = j.activo ? usuarios.find((u) => u.id === j.activo) || null : null;
         return;
       }
@@ -744,6 +735,7 @@ async function cargarUsuarios() {
   } catch (e) { /* ignorar */ }
   usuarios = [];
   usuarioActivo = null;
+  servidorSync = "";
 }
 
 function usuarioActual() {
@@ -755,15 +747,17 @@ function actualizarChipUsuarios() {
   if (!chip) return;
   const u = usuarioActual();
   chip.title = u
-    ? `Sincroniza la bitácora con @${u.github} en ${u.repo}`
-    : "Sin usuario: crea o selecciona uno en «Usuarios»";
-  chip.textContent = u ? `${u.nombre} · @${u.github}` : "";
+    ? `Operador activo: ${u.nombre}. Úsalo como responsable en la hoja.`
+    : "Sin operador: crea o selecciona uno en «Operadores»";
+  chip.textContent = u ? u.nombre : "";
 }
 
 function abrirModalUsuarios() {
   editandoUsuario = null;
   renderizarListaUsuarios();
   limpiarFormUsuario();
+  $("sync-direccion").value = servidorSync;
+  mostrarPistaServidor();
   $("modal-usuarios").hidden = false;
 }
 
@@ -786,7 +780,7 @@ function renderizarListaUsuarios() {
     radio.name = "usuario-radio";
     radio.className = "radio";
     radio.checked = activo;
-    radio.title = "Activar esta cuenta para sincronizar";
+    radio.title = "Elegir este operador como responsable";
     radio.addEventListener("change", () => seleccionarUsuario(u.id));
 
     const datos = document.createElement("div");
@@ -800,7 +794,7 @@ function renderizarListaUsuarios() {
       b.appendChild(mar);
     }
     const sub = document.createElement("span");
-    sub.textContent = `@${u.github || "?"} · ${u.repo || "?"}`;
+    sub.textContent = "Operador";
     datos.appendChild(b);
     datos.appendChild(sub);
 
@@ -827,17 +821,21 @@ function seleccionarUsuario(id) {
   guardarUsuarios();
   renderizarListaUsuarios();
   actualizarChipUsuarios();
-  estado(`Usuario activo: ${usuarioActivo ? usuarioActivo.nombre : "ninguno"}.`);
+  const v = visitaActual();
+  if (v && usuarioActivo) {
+    v.datos.responsable = usuarioActivo.nombre;
+    rellenarFormulario();
+    persistirDoc();
+  }
+  estado(`Operador activo: ${usuarioActivo ? usuarioActivo.nombre : "ninguno"}.`);
 }
 
 function limpiarFormUsuario() {
-  ["us-nombre", "us-github", "us-token", "us-repo"].forEach((id) => { $(id).value = ""; });
-  $("us-rama").value = "datos";
+  $("us-nombre").value = "";
   editandoUsuario = null;
-  $("titulo-form-usuario").textContent = "Añadir usuario";
   $("btn-eliminar-usuario").hidden = true;
   $("btn-cancelar-usuario").hidden = true;
-  $("btn-guardar-usuario").textContent = "Guardar usuario";
+  $("btn-guardar-usuario").textContent = "Guardar operador";
   renderizarListaUsuarios();
 }
 
@@ -846,11 +844,6 @@ function editarUsuario(id) {
   if (!u) return;
   editandoUsuario = id;
   $("us-nombre").value = u.nombre || "";
-  $("us-github").value = u.github || "";
-  $("us-token").value = u.token || "";
-  $("us-repo").value = u.repo || "";
-  $("us-rama").value = u.rama || "datos";
-  $("titulo-form-usuario").textContent = "Editar usuario";
   $("btn-eliminar-usuario").hidden = false;
   $("btn-cancelar-usuario").hidden = false;
   $("btn-guardar-usuario").textContent = "Guardar cambios";
@@ -858,30 +851,23 @@ function editarUsuario(id) {
 
 function guardarUsuarioForm() {
   const nombre = $("us-nombre").value.trim();
-  const github = $("us-github").value.trim();
-  const token = $("us-token").value.trim();
-  const repo = $("us-repo").value.trim();
-  const rama = ($("us-rama").value.trim() || "datos").replace(/^refs\/heads\//, "");
-  if (!nombre || !github || !repo) {
-    alert("El nombre, el usuario de GitHub y el repositorio son obligatorios.");
+  if (!nombre) {
+    alert("Escribe el nombre del operador.");
     return;
   }
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-    alert('El repositorio debe escribirse como "propietario/nombre".');
-    return;
-  }
-  const datos = {
-    id: editandoUsuario || ("u" + Date.now().toString(36)),
-    nombre,
-    github,
-    token,
-    repo,
-    rama,
-  };
+  const datos = { id: editandoUsuario || ("u" + Date.now().toString(36)), nombre };
   if (editandoUsuario) {
     const i = usuarios.findIndex((x) => x.id === editandoUsuario);
     if (i > -1) usuarios[i] = datos;
-    if (usuarioActivo && usuarioActivo.id === editandoUsuario) usuarioActivo = datos;
+    if (usuarioActivo && usuarioActivo.id === editandoUsuario) {
+      usuarioActivo = datos;
+      const v = visitaActual();
+      if (v) {
+        v.datos.responsable = datos.nombre;
+        rellenarFormulario();
+        persistirDoc();
+      }
+    }
   } else {
     usuarios.push(datos);
     if (!usuarioActivo) usuarioActivo = datos;
@@ -889,14 +875,14 @@ function guardarUsuarioForm() {
   guardarUsuarios();
   renderizarListaUsuarios();
   actualizarChipUsuarios();
-  estado("Usuario guardado.");
+  estado("Operador guardado.");
   limpiarFormUsuario();
 }
 
 function eliminarUsuario(id) {
   const u = usuarios.find((x) => x.id === id);
   if (!u) return;
-  if (!confirm(`¿Eliminar el usuario "${u.nombre}"?\nLas hojas de la bitácora no se borran: solo se quita esta cuenta.`)) return;
+  if (!confirm(`¿Eliminar el operador "${u.nombre}"?\nLas hojas de la bitácora no se borran.`)) return;
   usuarios = usuarios.filter((x) => x.id !== id);
   if (usuarioActivo && usuarioActivo.id === id) {
     usuarioActivo = usuarios.length ? usuarios[0] : null;
@@ -905,11 +891,73 @@ function eliminarUsuario(id) {
   if (editandoUsuario === id) limpiarFormUsuario();
   renderizarListaUsuarios();
   actualizarChipUsuarios();
-  estado("Usuario eliminado.");
+  estado("Operador eliminado.");
+}
+
+function normalizarDireccion(dir) {
+  if (!dir) return "";
+  let s = String(dir).trim();
+  s = s.replace(/^https?:\/\//i, "");
+  s = s.replace(/\/+$/, "");
+  return s;
+}
+
+async function mostrarPistaServidor() {
+  const pista = $("pista-servidor");
+  if (!pista) return;
+  if (localMode) {
+    pista.textContent =
+      "En el ordenador de casa, abre Bitácora BEE y mira la dirección que muestra al arrancar (ej. 192.168.1.10:8000). Escribe aquí esa dirección y pulsa «Guardar dirección».";
+    return;
+  }
+  try {
+    const r = await fetch("/api/red", { cache: "no-store" });
+    const j = await r.json();
+    const ip = (j.ips && j.ips[0]) || "127.0.0.1";
+    const puerto = j.puerto || $.puerto || "8000";
+    pista.textContent =
+      `Este ordenador sirve la bitácora en la red local: http://${ip}:${puerto}. ` +
+      "En el móvil escribe ese valor y pulsa «Guardar dirección».";
+    if (!$("sync-direccion").value) $("sync-direccion").value = ip + ":" + puerto;
+  } catch (e) {
+    pista.textContent = "Este ordenador sirve la bitácora en la red local. En el móvil escribe tu dirección IP y el puerto (ej. 192.168.1.10:8000).";
+  }
+}
+
+async function usarEsteAparatoComoServidor() {
+  if (localMode) {
+    alert("En el móvil no eres el servidor.\n\nEscribe la dirección del ordenador donde está abierta Bitácora BEE (IP:puerto).");
+    return;
+  }
+  try {
+    const r = await fetch("/api/red", { cache: "no-store" });
+    const j = await r.json();
+    const ip = (j.ips && j.ips[0]) || "127.0.0.1";
+    const puerto = j.puerto || "8000";
+    servidorSync = `${ip}:${puerto}`;
+    $("sync-direccion").value = servidorSync;
+    guardarUsuarios();
+    estado(`Servidor de sincronización: ${servidorSync}.`);
+  } catch (e) {
+    alert("No se pudo averiguar la dirección de este ordenador.");
+  }
+}
+
+function guardarDireccionSync() {
+  const dir = normalizarDireccion($("sync-direccion").value);
+  if (!dir) {
+    servidorSync = "";
+    guardarUsuarios();
+    estado("Dirección de sincronización borrada.");
+    return;
+  }
+  servidorSync = dir;
+  guardarUsuarios();
+  estado(`Dirección de sincronización guardada: ${dir}.`);
 }
 
 /* ------------------------------------------------------------------ */
-/* sincronización con GitHub                                           */
+/* sincronización por red local                                        */
 /* ------------------------------------------------------------------ */
 
 function fusionarDocs(local, remoto) {
@@ -930,78 +978,6 @@ function fusionarDocs(local, remoto) {
   return { visitas, actual, sincronizado: new Date().toISOString() };
 }
 
-async function leerRemoto(u, cab) {
-  const rama = u.rama || "datos";
-  const url = `${GH_API}/repos/${u.repo}/contents/bitacorabee.json?ref=${encodeURIComponent(rama)}`;
-  const r = await fetch(url, { headers: cab });
-  if (r.status === 404) return null;
-  if (r.status === 401 || r.status === 403) {
-    throw new Error("Token inválido o sin permisos de «repo» para " + u.repo);
-  }
-  if (!r.ok) {
-    const t = await r.json().catch(() => null);
-    throw new Error((t && t.message) || ("Error HTTP " + r.status));
-  }
-  const j = await r.json();
-  const remoto = JSON.parse(b64Decode(j.content));
-  if (!remoto || !Array.isArray(remoto.visitas)) {
-    throw new Error("El archivo remoto de " + u.repo + " no es una bitácora válida.");
-  }
-  return remoto;
-}
-
-async function crearRama(u, cab, rama) {
-  const info = await fetch(`${GH_API}/repos/${u.repo}`, { headers: cab });
-  if (!info.ok) throw new Error("No se pudo leer el repositorio " + u.repo);
-  const repo = await info.json();
-  const principal = repo.default_branch || "main";
-  const ref = await fetch(`${GH_API}/repos/${u.repo}/git/ref/heads/${principal}`, { headers: cab });
-  if (!ref.ok) throw new Error("No se pudo comprobar la rama " + principal);
-  const refJson = await ref.json();
-  const r = await fetch(`${GH_API}/repos/${u.repo}/git/refs`, {
-    method: "POST",
-    headers: { ...cab, "Content-Type": "application/json" },
-    body: JSON.stringify({ ref: "refs/heads/" + rama, sha: refJson.object.sha }),
-  });
-  if (!r.ok && r.status !== 422) {
-    const t = await r.json().catch(() => null);
-    throw new Error((t && t.message) || ("No se pudo crear la rama " + rama));
-  }
-  return true;
-}
-
-async function subirJSON(u, cab, docSubir) {
-  const rama = u.rama || "datos";
-  const base = `${GH_API}/repos/${u.repo}/contents/bitacorabee.json`;
-  let sha = null;
-  const consulta = await fetch(`${base}?ref=${encodeURIComponent(rama)}`, { headers: cab });
-  if (consulta.ok) {
-    sha = (await consulta.json()).sha;
-  } else if (consulta.status !== 404) {
-    const t = await consulta.json().catch(() => null);
-    throw new Error((t && t.message) || ("Error HTTP " + consulta.status));
-  }
-  const cuerpo = {
-    message: "Sincronización de Bitácora BEE",
-    content: b64Encode(JSON.stringify(docSubir)),
-    branch: rama,
-  };
-  if (sha) cuerpo.sha = sha;
-  const resp = await fetch(base, {
-    method: "PUT",
-    headers: { ...cab, "Content-Type": "application/json" },
-    body: JSON.stringify(cuerpo),
-  });
-  if (resp.ok) return true;
-  const t = await resp.json().catch(() => null);
-  if (resp.status === 422 && String(t && t.message).indexOf("sha") > -1 && !cuerpo.sha) {
-    /* la rama no existe todavía: se crea y se reintenta */
-    await crearRama(u, cab, rama);
-    return subirJSON(u, cab, docSubir);
-  }
-  throw new Error((t && t.message) || ("Error HTTP " + resp.status));
-}
-
 async function persistirDoc() {
   guardarLocalCopia();
   if (localMode) return;
@@ -1019,47 +995,45 @@ async function persistirDoc() {
 async function sincronizar() {
   const u = usuarioActual();
   leerFormulario();
-  if (!u) {
-    estado("Añade o selecciona un usuario para sincronizar.");
+  const dir = normalizarDireccion(servidorSync);
+  if (!dir) {
+    estado("Indica la dirección del servidor con el que sincronizar.");
     abrirModalUsuarios();
+    setTimeout(() => { try { $("sync-direccion").focus(); } catch (e) { /* ignorar */ } }, 50);
     return;
   }
-  if (!u.token) {
-    estado("Ese usuario no tiene token de GitHub.");
-    abrirModalUsuarios();
-    editarUsuario(u.id);
-    alert('Ese usuario no tiene token de GitHub.\n\nEdítalo y pega un token con permiso «repo».');
-    return;
-  }
-  const cab = {
-    Authorization: "token " + u.token,
-    Accept: "application/vnd.github.v3+json",
-  };
-  estado(`Sincronizando con @${u.github}…`);
+  const base = "http://" + dir;
+  estado(`Sincronizando con ${dir}…`);
   try {
-    const remoto = await leerRemoto(u, cab);
-    if (!remoto) {
-      const docSync = JSON.parse(JSON.stringify(doc));
-      docSync.sincronizado = new Date().toISOString();
-      await subirJSON(u, cab, docSync);
-      persistirDoc();
-      estado(`Sincronizado con @${u.github}: subida inicial a GitHub.`);
-      return;
+    const resp = await fetch(base + "/api/datos", { cache: "no-store" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const remoto = await resp.json();
+    if (!remoto || !Array.isArray(remoto.visitas)) {
+      throw new Error("El servidor no devolvió una bitácora válida");
     }
     const fusionado = fusionarDocs(doc, remoto);
-    const cambioLocal = JSON.stringify(fusionado) !== JSON.stringify(doc);
-    if (cambioLocal) {
+    const hayCambio = JSON.stringify(fusionado) !== JSON.stringify(doc);
+    if (hayCambio) {
       doc = fusionado;
       await persistirDoc();
       renderizarSelector();
       rellenarFormulario();
     }
-    await subirJSON(u, cab, fusionado);
+    const put = await fetch(base + "/api/datos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fusionado),
+    });
+    if (!put.ok) throw new Error("HTTP " + put.status);
     const hora = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    estado(`Sincronizado con @${u.github} (${hora}).`);
+    estado(`Sincronizado con ${dir} (${hora}).`);
   } catch (e) {
     estado("Error de sincronización.");
-    alert(`No se pudo sincronizar con @${u.github}.\n\n${e.message}\n\nComprueba el usuario, el token y el repositorio.`);
+    alert(
+      `No se pudo sincronizar con ${dir}.\n\n${e.message}\n\n` +
+      "Comprueba que el servidor esté abierto, que ambos equipos estén en la misma red " +
+      "y que la dirección (IP:puerto) sea correcta."
+    );
   }
 }
 
@@ -1231,6 +1205,8 @@ function enlazarFormulario() {
     if (editandoUsuario) eliminarUsuario(editandoUsuario);
   });
   $("btn-cancelar-usuario").addEventListener("click", limpiarFormUsuario);
+  $("btn-guardar-sync").addEventListener("click", guardarDireccionSync);
+  $("btn-usar-este-aparato").addEventListener("click", usarEsteAparatoComoServidor);
   $("modal-usuarios").addEventListener("click", (ev) => {
     if (ev.target === $("modal-usuarios")) cerrarModalUsuarios();
   });

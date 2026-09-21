@@ -43,19 +43,25 @@ móvil la bitácora funciona sin servidor: los datos se guardan en el propio
 dispositivo. Para mover los datos entre equipos usa **Exportar JSON** y
 **Importar JSON** (botones en la ventana "Hojas").
 
-## Usuarios y sincronización entre dispositivos
+## Operadores y sincronización entre dispositivos
 
-Para tener las mismas hojas en el ordenador y en el móvil:
+Cada persona trabaja con **su propia aplicación independiente** (no hace falta
+ninguna cuenta ni Internet). Para tener las mismas hojas entre tus propios
+dispositivos (ordenador y móvil) en la misma red local:
 
-1. Abre **Usuarios** y pulsa **Añadir usuario**.
-2. Indica tu **usuario de GitHub**, un **token con permiso `repo`** (GitHub →
-   Settings → Developer settings → Personal access tokens) y el
-   **repositorio** (ej. `JMBermejias/bitacorabee`).
-3. Con el usuario activo, pulsa **Sincronizar** en cada dispositivo con la
-   misma cuenta: las hojas se unen (fusionan) a través de GitHub y ya
-   quedan disponibles en los dos.
-4. Los usuarios se pueden añadir, editar y eliminar, y la cuenta activa se
-   ve siempre en la esquina superior.
+1. **Ordenador**: deja Bitácora BEE abierta. Al arrancar muestra la dirección
+   de la red local (ej. `http://192.168.1.10:8000/`) y sirve la bitácora al
+   resto de dispositivos de la red.
+2. **Móvil**: abre **Usuarios**, escribe la dirección del ordenador
+   (`IP:puerto`, ej. `192.168.1.10:8000`) y pulsa **Guardar dirección**.
+3. Pulsa **Sincronizar** en el móvil: las hojas se unen (fusionan) y quedan
+   en ambos dispositivos. La dirección se guarda y se puede volver a usar.
+4. También se puede sincronizar entre dos ordenadores de la misma red
+   (en el segundo escribe la dirección del primero).
+
+Los **operadores** son simples nombres locales (quién rellena la hoja) y se
+pueden añadir, editar y eliminar; el activo se usa automáticamente como
+«Responsable».
 
 ## Actualizaciones
 

@@ -24,7 +24,7 @@
     </label>
     <button id="btn-hojas" class="btn btn-claro" title="Ver y gestionar todas las revisiones guardadas">Hojas</button>
     <button id="btn-nueva" class="btn btn-claro" title="Crear una nueva revisión en blanco">Nueva</button>
-    <button id="btn-sincronizar" class="btn btn-verde" title="Sincronizar la bitácora con GitHub usando tu usuario">Sincronizar</button>
+    <button id="btn-sincronizar" class="btn btn-verde" title="Sincronizar la bitácora con otro dispositivo de la red local">Sincronizar</button>
     <button id="btn-usuarios" class="btn btn-claro" title="Gestionar usuarios de sincronización">Usuarios</button>
     <button id="btn-actualizar" class="btn btn-claro" title="Comprobar si hay una versión nueva">Actualizar</button>
     <button id="btn-guardar" class="btn btn-verde">Guardar</button>
@@ -183,55 +183,56 @@
 <!-- Hoja imprimible (solo visible al imprimir) -->
 <div id="hoja-impresion" class="hoja-impresion"></div>
 
-<!-- Ventana de usuarios de sincronización -->
+<!-- Ventana de operadores y sincronización -->
 <div id="modal-usuarios" class="modal-fondo" hidden>
   <div class="modal modal-usuarios">
     <div class="modal-cab">
       <div>
-        <h2>Usuarios de sincronización</h2>
-        <p>Los datos se sincronizan entre tus dispositivos a través de tu cuenta de GitHub</p>
+        <h2>Operadores y sincronización</h2>
+        <p>Cada uno trabaja con su aplicación; sincroniza entre tus dispositivos por red local</p>
       </div>
       <button id="btn-cerrar-usuarios" class="btn btn-claro">Cerrar</button>
     </div>
     <div class="modal-cuerpo">
+
+      <h3>Operadores</h3>
       <div id="lista-usuarios" class="lista-usuarios"></div>
       <p id="sin-usuarios" class="vacio" hidden>
-        Aún no hay usuarios. Añade el primero para poder sincronizar entre dispositivos.
+        Aún no hay operadores. Añade un nombre (el activo se usa como responsable en la hoja).
       </p>
-      <hr>
-      <h3 id="titulo-form-usuario">Añadir usuario</h3>
+
+      <h4>Añadir / editar operador</h4>
       <div class="grid-datos grid-usuarios">
         <div class="campo">
-          <label for="us-nombre">Nombre (etiqueta)</label>
-          <input id="us-nombre" type="text" placeholder="Ej.: Apiario de casa">
-        </div>
-        <div class="campo">
-          <label for="us-github">Usuario de GitHub</label>
-          <input id="us-github" type="text" placeholder="Tu nombre de usuario en GitHub">
-        </div>
-        <div class="campo">
-          <label for="us-token">Token de GitHub (permiso repo)</label>
-          <input id="us-token" type="password" placeholder="ghp_..." autocomplete="off">
-        </div>
-        <div class="campo">
-          <label for="us-repo">Repositorio (propietario/nombre)</label>
-          <input id="us-repo" type="text" placeholder="JMBermejias/bitacorabee">
-        </div>
-        <div class="campo">
-          <label for="us-rama">Rama de datos</label>
-          <input id="us-rama" type="text" value="datos" placeholder="datos">
+          <label for="us-nombre">Nombre del operador</label>
+          <input id="us-nombre" type="text" placeholder="Ej.: José Manuel">
         </div>
       </div>
-      <p class="aviso-token">
-        El token se guarda solo en tus dispositivos y es la llave que permite
-        sincronizar la bitácora entre ellos. Crea un token con permiso <b>repo</b> en
-        GitHub → Settings → Developer settings → Personal access tokens.
-      </p>
       <div class="modal-pie">
-        <button id="btn-guardar-usuario" class="btn btn-verde">Guardar usuario</button>
-        <button id="btn-eliminar-usuario" class="btn btn-rojo" hidden>Eliminar usuario</button>
+        <button id="btn-guardar-usuario" class="btn btn-verde">Guardar operador</button>
+        <button id="btn-eliminar-usuario" class="btn btn-rojo" hidden>Eliminar operador</button>
         <button id="btn-cancelar-usuario" class="btn btn-claro" hidden>Cancelar edición</button>
       </div>
+
+      <h3>Sincronización entre dispositivos</h3>
+      <div class="grid-datos grid-usuarios">
+        <div class="campo">
+          <label for="sync-direccion">Dirección del servidor (IP:puerto)</label>
+          <input id="sync-direccion" type="text" placeholder="192.168.1.10:8000" autocomplete="off">
+        </div>
+      </div>
+      <p id="pista-servidor" class="aviso-token"></p>
+      <div class="modal-pie">
+        <button id="btn-usar-este-aparato" class="btn btn-claro">Usar este aparato como servidor</button>
+        <button id="btn-guardar-sync" class="btn btn-verde">Guardar dirección</button>
+      </div>
+      <p class="pista-sync">
+        Para sincronizar, abre Bitácora BEE en el ordenador (sirve las hojas a la
+        red local), apunta aquí su dirección en el móvil y pulsa <b>Sincronizar</b>
+        en la barra superior. En el ordenador, si esta aplicación es el servidor,
+        déjalo en «Usar este aparato como servidor». También funciona entre dos
+        ordenadores de la misma red.
+      </p>
     </div>
   </div>
 </div>
