@@ -17,16 +17,31 @@
     </div>
   </div>
   <div class="acciones">
+    <span id="chip-usuario" class="chip-usuario" title="Usuario de sincronización activo"></span>
     <label class="campo-select mini" for="selector-visita">
       <span>Revisión</span>
       <select id="selector-visita"></select>
     </label>
     <button id="btn-hojas" class="btn btn-claro" title="Ver y gestionar todas las revisiones guardadas">Hojas</button>
     <button id="btn-nueva" class="btn btn-claro" title="Crear una nueva revisión en blanco">Nueva</button>
+    <button id="btn-sincronizar" class="btn btn-verde" title="Sincronizar la bitácora con GitHub usando tu usuario">Sincronizar</button>
+    <button id="btn-usuarios" class="btn btn-claro" title="Gestionar usuarios de sincronización">Usuarios</button>
+    <button id="btn-actualizar" class="btn btn-claro" title="Comprobar si hay una versión nueva">Actualizar</button>
     <button id="btn-guardar" class="btn btn-verde">Guardar</button>
     <button id="btn-imprimir" class="btn btn-azul" title="Genera la hoja impresa">Imprimir hoja</button>
   </div>
 </header>
+
+<div id="banner-act" class="banner-act" hidden>
+  <div>
+    <strong>Hay una versión nueva disponible</strong>
+    <span id="banner-act-texto"></span>
+  </div>
+  <div class="banner-act-botones">
+    <button id="btn-banner-actualizar" class="btn btn-verde">Actualizar ahora</button>
+    <button id="btn-banner-cerrar" class="btn btn-claro">Más tarde</button>
+  </div>
+</div>
 
 <main class="contenido">
 
@@ -131,11 +146,95 @@
 
 <footer class="pie">
   <span id="estado-guardado">Listo.</span>
-  <span id="version-app"></span>
+  <div class="pie-legal">
+    <span class="legal-copy">© <span id="ano-copy"></span> José Manuel Bernabeu Mejías · Licencia GPL-3.0 · apicolanovelda@gmail.com</span>
+    <button id="btn-credenciales" class="btn btn-claro btn-pie" title="Datos de contacto del autor">Credenciales</button>
+    <span id="version-app"></span>
+  </div>
 </footer>
+
+<!-- Credenciales del autor -->
+<div id="modal-credenciales" class="modal-fondo" hidden>
+  <div class="modal modal-credenciales">
+    <div class="modal-cab">
+      <div>
+        <h2>Credenciales</h2>
+        <p>Autor y datos de contacto de Bitácora BEE</p>
+      </div>
+      <button id="btn-cerrar-credenciales" class="btn btn-claro">Cerrar</button>
+    </div>
+    <div class="modal-cuerpo">
+      <dl class="lista-credenciales">
+        <dt>Nombre</dt>
+        <dd>José Manuel Bernabeu Mejías</dd>
+        <dt>Dirección</dt>
+        <dd>Calle Médico Rafael Navarro 2, 2C</dd>
+        <dt>Población</dt>
+        <dd>Novelda · 03660 Alicante</dd>
+        <dt>Teléfono</dt>
+        <dd><a href="tel:698931018">698 931 018</a></dd>
+        <dt>Email</dt>
+        <dd><a href="mailto:apicolanovelda@gmail.com">apicolanovelda@gmail.com</a></dd>
+      </dl>
+    </div>
+  </div>
+</div>
 
 <!-- Hoja imprimible (solo visible al imprimir) -->
 <div id="hoja-impresion" class="hoja-impresion"></div>
+
+<!-- Ventana de usuarios de sincronización -->
+<div id="modal-usuarios" class="modal-fondo" hidden>
+  <div class="modal modal-usuarios">
+    <div class="modal-cab">
+      <div>
+        <h2>Usuarios de sincronización</h2>
+        <p>Los datos se sincronizan entre tus dispositivos a través de tu cuenta de GitHub</p>
+      </div>
+      <button id="btn-cerrar-usuarios" class="btn btn-claro">Cerrar</button>
+    </div>
+    <div class="modal-cuerpo">
+      <div id="lista-usuarios" class="lista-usuarios"></div>
+      <p id="sin-usuarios" class="vacio" hidden>
+        Aún no hay usuarios. Añade el primero para poder sincronizar entre dispositivos.
+      </p>
+      <hr>
+      <h3 id="titulo-form-usuario">Añadir usuario</h3>
+      <div class="grid-datos grid-usuarios">
+        <div class="campo">
+          <label for="us-nombre">Nombre (etiqueta)</label>
+          <input id="us-nombre" type="text" placeholder="Ej.: Apiario de casa">
+        </div>
+        <div class="campo">
+          <label for="us-github">Usuario de GitHub</label>
+          <input id="us-github" type="text" placeholder="Tu nombre de usuario en GitHub">
+        </div>
+        <div class="campo">
+          <label for="us-token">Token de GitHub (permiso repo)</label>
+          <input id="us-token" type="password" placeholder="ghp_..." autocomplete="off">
+        </div>
+        <div class="campo">
+          <label for="us-repo">Repositorio (propietario/nombre)</label>
+          <input id="us-repo" type="text" placeholder="JMBermejias/bitacorabee">
+        </div>
+        <div class="campo">
+          <label for="us-rama">Rama de datos</label>
+          <input id="us-rama" type="text" value="datos" placeholder="datos">
+        </div>
+      </div>
+      <p class="aviso-token">
+        El token se guarda solo en tus dispositivos y es la llave que permite
+        sincronizar la bitácora entre ellos. Crea un token con permiso <b>repo</b> en
+        GitHub → Settings → Developer settings → Personal access tokens.
+      </p>
+      <div class="modal-pie">
+        <button id="btn-guardar-usuario" class="btn btn-verde">Guardar usuario</button>
+        <button id="btn-eliminar-usuario" class="btn btn-rojo" hidden>Eliminar usuario</button>
+        <button id="btn-cancelar-usuario" class="btn btn-claro" hidden>Cancelar edición</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Ventana de hojas guardadas -->
 <div id="modal-hojas" class="modal-fondo" hidden>

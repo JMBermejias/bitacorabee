@@ -27,6 +27,7 @@ rm -rf cordova-build
 mkdir -p cordova-build/www "$DIST"
 
 cp "$APP"/index.html "$APP"/app.js "$APP"/styles.css cordova-build/www/
+printf '\nwindow.BITACORA_VERSION = "%s";\n' "$VERSION" >> cordova-build/www/app.js
 sed -e "s/@VERSION@/$VERSION/" cordova/config.xml > cordova-build/config.xml
 
 echo "==> Instalando Cordova (local)"

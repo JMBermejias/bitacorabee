@@ -43,6 +43,30 @@ móvil la bitácora funciona sin servidor: los datos se guardan en el propio
 dispositivo. Para mover los datos entre equipos usa **Exportar JSON** y
 **Importar JSON** (botones en la ventana "Hojas").
 
+## Usuarios y sincronización entre dispositivos
+
+Para tener las mismas hojas en el ordenador y en el móvil:
+
+1. Abre **Usuarios** y pulsa **Añadir usuario**.
+2. Indica tu **usuario de GitHub**, un **token con permiso `repo`** (GitHub →
+   Settings → Developer settings → Personal access tokens) y el
+   **repositorio** (ej. `JMBermejias/bitacorabee`).
+3. Con el usuario activo, pulsa **Sincronizar** en cada dispositivo con la
+   misma cuenta: las hojas se unen (fusionan) a través de GitHub y ya
+   quedan disponibles en los dos.
+4. Los usuarios se pueden añadir, editar y eliminar, y la cuenta activa se
+   ve siempre en la esquina superior.
+
+## Actualizaciones
+
+- Al abrir la aplicación se comprueba automáticamente si hay una release
+  nueva y se ofrece **Actualizar ahora**.
+- El botón **Actualizar** de la barra comprueba manualmente.
+- En el ordenador: si el código es escribible se auto-actualiza y se
+  reinicia solo; en un paquete `.deb` instalado indica cómo descargar e
+  instalar la nueva versión.
+- En el móvil: indica la nueva versión y abre la página con el `.apk` nuevo.
+
 ## Características
 
 - Guardado automático y botón **Guardar** (abre la ventana **Hojas** con
@@ -50,7 +74,8 @@ dispositivo. Para mover los datos entre equipos usa **Exportar JSON** y
 - Historial de revisiones con selector "Revisión".
 - Botón **Imprimir hoja**: genera la hoja apaisada fiel al PDF.
 - Interfaz responsive: ordenador, tableta y móvil.
-- Sin conexión a Internet.
+- Funciona sin conexión; la conexión solo se usa para sincronizar y para
+  comprobar actualizaciones.
 
 ## Releases automáticas (GitHub Actions)
 

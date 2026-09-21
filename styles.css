@@ -98,6 +98,43 @@ html, body {
   letter-spacing: .4px;
 }
 
+/* ---------- chip de usuario en la barra ---------- */
+.chip-usuario {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(120, 90, 0, 0.35);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #4a3e0e;
+  min-height: 38px;
+}
+.chip-usuario:empty::before { content: "Sin usuario de sincronización"; }
+
+/* ---------- banner de actualización ---------- */
+.banner-act {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  max-width: 1600px;
+  margin: 16px auto 0;
+  padding: 12px 18px;
+  background: var(--verde);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+  flex-wrap: wrap;
+}
+.banner-act[hidden] { display: none; }
+.banner-act strong { margin-right: 8px; }
+.banner-act-botones { display: flex; gap: 8px; }
+.banner-act .btn-claro { background: #fff; }
+
 /* ---------- contenido ---------- */
 .contenido {
   max-width: 1600px;
@@ -266,12 +303,43 @@ textarea { resize: vertical; min-height: 74px; }
 .pie {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   max-width: 1600px;
   margin: 0 auto;
   padding: 0 26px 26px;
   font-size: 13px;
   color: var(--suave);
+  flex-wrap: wrap;
 }
+.pie-legal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.legal-copy { font-weight: 600; color: #4a3e0e; }
+.btn-pie { padding: 8px 14px; font-size: 12.5px; border-radius: 9px; }
+
+/* ---------- credenciales ---------- */
+.modal-credenciales { width: min(520px, 100%); }
+.lista-credenciales {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px 14px;
+  margin: 0;
+}
+.lista-credenciales dt {
+  font-weight: 800;
+  color: var(--suave);
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: .4px;
+  padding-top: 2px;
+}
+.lista-credenciales dd { margin: 0; font-size: 15px; }
+.lista-credenciales a { color: var(--azul); text-decoration: none; font-weight: 600; }
+.lista-credenciales a:hover { text-decoration: underline; }
 
 /* ---------- modal de hojas ---------- */
 .modal-fondo {
@@ -345,6 +413,49 @@ textarea { resize: vertical; min-height: 74px; }
 .btn-mini.duplicar { background: var(--verde); color: #fff; }
 
 .vacio { color: var(--suave); text-align: center; font-size: 15px; padding: 26px 0; }
+
+/* ---------- modal de usuarios ---------- */
+.modal-usuarios { width: min(760px, 100%); }
+.lista-usuarios { display: flex; flex-direction: column; gap: 10px; }
+.usuario-ficha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: #fff;
+}
+.usuario-ficha.activo { border-color: var(--verde); box-shadow: 0 0 0 2px rgba(46, 125, 50, 0.18); }
+.usuario-ficha .radio {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--verde);
+  flex: 0 0 auto;
+}
+.usuario-ficha .datos-u { flex: 1; min-width: 0; }
+.usuario-ficha .datos-u b { display: block; font-size: 15px; }
+.usuario-ficha .datos-u span {
+  display: block;
+  font-size: 12.5px;
+  color: var(--suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usuario-ficha .mar { font-size: 11px; font-weight: 800; color: var(--verde); text-transform: uppercase; }
+.usuario-ficha .btn { padding: 8px 12px; font-size: 12.5px; border-radius: 9px; }
+.modal-usuarios h3 { margin: 16px 0 12px; font-size: 16px; color: #2a2308; }
+.grid-usuarios { grid-template-columns: repeat(2, 1fr); }
+.aviso-token {
+  font-size: 12.5px;
+  color: var(--suave);
+  background: var(--ambar-suave);
+  border-left: 4px solid var(--ambar);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 14px 0 4px;
+}
 
 .modal-pie {
   display: flex;

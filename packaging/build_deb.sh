@@ -81,12 +81,25 @@ Bitácora BEE $VERSION
 
 Registro de revisiones de apiario (versión web).
 
+Copyright (C) 2026 $AUTHOR <$EMAIL>
+
 Autor: $AUTHOR
 Correo: $EMAIL
 Dirección: Calle Médico Rafael Navarro 2, 2C — Novelda 03660 Alicante
+Teléfono: 698 931 018
 
-Licencia MIT: redistribución y uso comercial y privado permitidos,
-con atribución de autoría.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 EOF
 
 SIZE=$(du -sk "$ROOT" | cut -f1)

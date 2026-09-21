@@ -29,6 +29,12 @@ const CLAVES_BASE = ["apiario", "ubicacion", "fecha", "hora", "clima", "responsa
 const CLAVES_PROX = ["fecha", "actividades_pendientes", "notas"];
 
 const ESTADO_JSON = "/api/datos"; /* ruta de la API donde se guarda */
+const GH_API = "https://api.github.com";
+const GH_REPO_ORIGEN = "JMBermejias/bitacorabee";
+const CLAVE_USUARIOS = "bitacorabee_usuarios";
+const APP_VERSION =
+  typeof window.BITACORA_VERSION !== "undefined" && window.BITACORA_VERSION
+    ? window.BITACORA_VERSION : "";
 
 const $ = (id) => document.getElementById(id);
 
@@ -36,6 +42,10 @@ let doc = null;               /* documento completo {visitas, actual} */
 let timerAutoguardado = null;
 let clavesAct = new Set();
 let localMode = false;        /* true si no hay servidor (p. ej. en Android) */
+let usuarios = [];            /* registro de usuarios de sincronización */
+let usuarioActivo = null;     /* usuario actualmente activo */
+let editandoUsuario = null;   /* id del usuario que se está editando */
+let infoActualizacion = null; /* última información de actualización consultada */
 
 /* ------------------------------------------------------------------ */
 /* utilidades                                                          */
@@ -672,6 +682,511 @@ function manejarImportar(ev) {
 }
 
 /* ------------------------------------------------------------------ */
+/* usuarios de sincronización                                          */
+/* ------------------------------------------------------------------ */
+
+function b64Encode(texto) {
+  const bytes = new TextEncoder().encode(texto);
+  let bin = "";
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin);
+}
+
+function b64Decode(b64) {
+  const bin = atob(b64);
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function armarioUsuarios() {
+  return {
+    usuarios,
+    activo: usuarioActivo ? usuarioActivo.id : null,
+  };
+}
+
+async function guardarUsuarios() {
+  try { localStorage.setItem(CLAVE_USUARIOS, JSON.stringify(armarioUsuarios())); } catch (e) { /* sin almacén */ }
+  if (localMode) return;
+  try {
+    await fetch("/api/usuarios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(armarioUsuarios()),
+    });
+  } catch (e) { /* el servidor no acepta usuarios: se siguen guardando en el dispositivo */ }
+}
+
+async function cargarUsuarios() {
+  if (!localMode) {
+    try {
+      const r = await fetch("/api/usuarios", { cache: "no-store" });
+      if (r.ok) {
+        const j = await r.json();
+        if (j && Array.isArray(j.usuarios)) {
+          usuarios = j.usuarios;
+          usuarioActivo = j.activo ? usuarios.find((u) => u.id === j.activo) || null : null;
+          return;
+        }
+      }
+    } catch (e) { /* seguir con local */ }
+  }
+  try {
+    const s = localStorage.getItem(CLAVE_USUARIOS);
+    if (s) {
+      const j = JSON.parse(s);
+      if (j && Array.isArray(j.usuarios)) {
+        usuarios = j.usuarios;
+        usuarioActivo = j.activo ? usuarios.find((u) => u.id === j.activo) || null : null;
+        return;
+      }
+    }
+  } catch (e) { /* ignorar */ }
+  usuarios = [];
+  usuarioActivo = null;
+}
+
+function usuarioActual() {
+  return usuarioActivo || null;
+}
+
+function actualizarChipUsuarios() {
+  const chip = $("chip-usuario");
+  if (!chip) return;
+  const u = usuarioActual();
+  chip.title = u
+    ? `Sincroniza la bitácora con @${u.github} en ${u.repo}`
+    : "Sin usuario: crea o selecciona uno en «Usuarios»";
+  chip.textContent = u ? `${u.nombre} · @${u.github}` : "";
+}
+
+function abrirModalUsuarios() {
+  editandoUsuario = null;
+  renderizarListaUsuarios();
+  limpiarFormUsuario();
+  $("modal-usuarios").hidden = false;
+}
+
+function cerrarModalUsuarios() {
+  $("modal-usuarios").hidden = true;
+}
+
+function renderizarListaUsuarios() {
+  const caja = $("lista-usuarios");
+  const vacio = $("sin-usuarios");
+  caja.innerHTML = "";
+  vacio.hidden = usuarios.length > 0;
+  usuarios.forEach((u) => {
+    const activo = u.id === (usuarioActivo && usuarioActivo.id);
+    const ficha = document.createElement("div");
+    ficha.className = "usuario-ficha" + (activo ? " activo" : "");
+
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "usuario-radio";
+    radio.className = "radio";
+    radio.checked = activo;
+    radio.title = "Activar esta cuenta para sincronizar";
+    radio.addEventListener("change", () => seleccionarUsuario(u.id));
+
+    const datos = document.createElement("div");
+    datos.className = "datos-u";
+    const b = document.createElement("b");
+    b.textContent = u.nombre || "Sin nombre";
+    if (activo) {
+      const mar = document.createElement("span");
+      mar.className = "mar";
+      mar.textContent = "  ACTIVO";
+      b.appendChild(mar);
+    }
+    const sub = document.createElement("span");
+    sub.textContent = `@${u.github || "?"} · ${u.repo || "?"}`;
+    datos.appendChild(b);
+    datos.appendChild(sub);
+
+    const btnEd = document.createElement("button");
+    btnEd.className = "btn btn-mini editar";
+    btnEd.textContent = "Editar";
+    btnEd.addEventListener("click", () => editarUsuario(u.id));
+
+    const btnDel = document.createElement("button");
+    btnDel.className = "btn btn-mini borrar";
+    btnDel.textContent = "Eliminar";
+    btnDel.addEventListener("click", () => eliminarUsuario(u.id));
+
+    ficha.appendChild(radio);
+    ficha.appendChild(datos);
+    ficha.appendChild(btnEd);
+    ficha.appendChild(btnDel);
+    caja.appendChild(ficha);
+  });
+}
+
+function seleccionarUsuario(id) {
+  usuarioActivo = usuarios.find((u) => u.id === id) || null;
+  guardarUsuarios();
+  renderizarListaUsuarios();
+  actualizarChipUsuarios();
+  estado(`Usuario activo: ${usuarioActivo ? usuarioActivo.nombre : "ninguno"}.`);
+}
+
+function limpiarFormUsuario() {
+  ["us-nombre", "us-github", "us-token", "us-repo"].forEach((id) => { $(id).value = ""; });
+  $("us-rama").value = "datos";
+  editandoUsuario = null;
+  $("titulo-form-usuario").textContent = "Añadir usuario";
+  $("btn-eliminar-usuario").hidden = true;
+  $("btn-cancelar-usuario").hidden = true;
+  $("btn-guardar-usuario").textContent = "Guardar usuario";
+  renderizarListaUsuarios();
+}
+
+function editarUsuario(id) {
+  const u = usuarios.find((x) => x.id === id);
+  if (!u) return;
+  editandoUsuario = id;
+  $("us-nombre").value = u.nombre || "";
+  $("us-github").value = u.github || "";
+  $("us-token").value = u.token || "";
+  $("us-repo").value = u.repo || "";
+  $("us-rama").value = u.rama || "datos";
+  $("titulo-form-usuario").textContent = "Editar usuario";
+  $("btn-eliminar-usuario").hidden = false;
+  $("btn-cancelar-usuario").hidden = false;
+  $("btn-guardar-usuario").textContent = "Guardar cambios";
+}
+
+function guardarUsuarioForm() {
+  const nombre = $("us-nombre").value.trim();
+  const github = $("us-github").value.trim();
+  const token = $("us-token").value.trim();
+  const repo = $("us-repo").value.trim();
+  const rama = ($("us-rama").value.trim() || "datos").replace(/^refs\/heads\//, "");
+  if (!nombre || !github || !repo) {
+    alert("El nombre, el usuario de GitHub y el repositorio son obligatorios.");
+    return;
+  }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    alert('El repositorio debe escribirse como "propietario/nombre".');
+    return;
+  }
+  const datos = {
+    id: editandoUsuario || ("u" + Date.now().toString(36)),
+    nombre,
+    github,
+    token,
+    repo,
+    rama,
+  };
+  if (editandoUsuario) {
+    const i = usuarios.findIndex((x) => x.id === editandoUsuario);
+    if (i > -1) usuarios[i] = datos;
+    if (usuarioActivo && usuarioActivo.id === editandoUsuario) usuarioActivo = datos;
+  } else {
+    usuarios.push(datos);
+    if (!usuarioActivo) usuarioActivo = datos;
+  }
+  guardarUsuarios();
+  renderizarListaUsuarios();
+  actualizarChipUsuarios();
+  estado("Usuario guardado.");
+  limpiarFormUsuario();
+}
+
+function eliminarUsuario(id) {
+  const u = usuarios.find((x) => x.id === id);
+  if (!u) return;
+  if (!confirm(`¿Eliminar el usuario "${u.nombre}"?\nLas hojas de la bitácora no se borran: solo se quita esta cuenta.`)) return;
+  usuarios = usuarios.filter((x) => x.id !== id);
+  if (usuarioActivo && usuarioActivo.id === id) {
+    usuarioActivo = usuarios.length ? usuarios[0] : null;
+  }
+  guardarUsuarios();
+  if (editandoUsuario === id) limpiarFormUsuario();
+  renderizarListaUsuarios();
+  actualizarChipUsuarios();
+  estado("Usuario eliminado.");
+}
+
+/* ------------------------------------------------------------------ */
+/* sincronización con GitHub                                           */
+/* ------------------------------------------------------------------ */
+
+function fusionarDocs(local, remoto) {
+  const clonar = (o) => JSON.parse(JSON.stringify(o));
+  const mapa = new Map();
+  (local.visitas || []).forEach((v) => mapa.set(v.id, clonar(v)));
+  (remoto.visitas || []).forEach((v) => {
+    const lv = mapa.get(v.id);
+    if (!lv) mapa.set(v.id, clonar(v));
+    else if ((v.actualizada || "") > (lv.actualizada || "")) mapa.set(v.id, clonar(v));
+  });
+  const visitas = Array.from(mapa.values());
+  let actual = (local.actual && visitas.some((v) => v.id === local.actual))
+    ? local.actual
+    : (remoto.actual && visitas.some((v) => v.id === remoto.actual))
+      ? remoto.actual
+      : (visitas[0] && visitas[0].id) || null;
+  return { visitas, actual, sincronizado: new Date().toISOString() };
+}
+
+async function leerRemoto(u, cab) {
+  const rama = u.rama || "datos";
+  const url = `${GH_API}/repos/${u.repo}/contents/bitacorabee.json?ref=${encodeURIComponent(rama)}`;
+  const r = await fetch(url, { headers: cab });
+  if (r.status === 404) return null;
+  if (r.status === 401 || r.status === 403) {
+    throw new Error("Token inválido o sin permisos de «repo» para " + u.repo);
+  }
+  if (!r.ok) {
+    const t = await r.json().catch(() => null);
+    throw new Error((t && t.message) || ("Error HTTP " + r.status));
+  }
+  const j = await r.json();
+  const remoto = JSON.parse(b64Decode(j.content));
+  if (!remoto || !Array.isArray(remoto.visitas)) {
+    throw new Error("El archivo remoto de " + u.repo + " no es una bitácora válida.");
+  }
+  return remoto;
+}
+
+async function crearRama(u, cab, rama) {
+  const info = await fetch(`${GH_API}/repos/${u.repo}`, { headers: cab });
+  if (!info.ok) throw new Error("No se pudo leer el repositorio " + u.repo);
+  const repo = await info.json();
+  const principal = repo.default_branch || "main";
+  const ref = await fetch(`${GH_API}/repos/${u.repo}/git/ref/heads/${principal}`, { headers: cab });
+  if (!ref.ok) throw new Error("No se pudo comprobar la rama " + principal);
+  const refJson = await ref.json();
+  const r = await fetch(`${GH_API}/repos/${u.repo}/git/refs`, {
+    method: "POST",
+    headers: { ...cab, "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: "refs/heads/" + rama, sha: refJson.object.sha }),
+  });
+  if (!r.ok && r.status !== 422) {
+    const t = await r.json().catch(() => null);
+    throw new Error((t && t.message) || ("No se pudo crear la rama " + rama));
+  }
+  return true;
+}
+
+async function subirJSON(u, cab, docSubir) {
+  const rama = u.rama || "datos";
+  const base = `${GH_API}/repos/${u.repo}/contents/bitacorabee.json`;
+  let sha = null;
+  const consulta = await fetch(`${base}?ref=${encodeURIComponent(rama)}`, { headers: cab });
+  if (consulta.ok) {
+    sha = (await consulta.json()).sha;
+  } else if (consulta.status !== 404) {
+    const t = await consulta.json().catch(() => null);
+    throw new Error((t && t.message) || ("Error HTTP " + consulta.status));
+  }
+  const cuerpo = {
+    message: "Sincronización de Bitácora BEE",
+    content: b64Encode(JSON.stringify(docSubir)),
+    branch: rama,
+  };
+  if (sha) cuerpo.sha = sha;
+  const resp = await fetch(base, {
+    method: "PUT",
+    headers: { ...cab, "Content-Type": "application/json" },
+    body: JSON.stringify(cuerpo),
+  });
+  if (resp.ok) return true;
+  const t = await resp.json().catch(() => null);
+  if (resp.status === 422 && String(t && t.message).indexOf("sha") > -1 && !cuerpo.sha) {
+    /* la rama no existe todavía: se crea y se reintenta */
+    await crearRama(u, cab, rama);
+    return subirJSON(u, cab, docSubir);
+  }
+  throw new Error((t && t.message) || ("Error HTTP " + resp.status));
+}
+
+async function persistirDoc() {
+  guardarLocalCopia();
+  if (localMode) return;
+  try {
+    await fetch(ESTADO_JSON, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: clavesLocales(),
+    });
+  } catch (e) {
+    localMode = true;
+  }
+}
+
+async function sincronizar() {
+  const u = usuarioActual();
+  leerFormulario();
+  if (!u) {
+    estado("Añade o selecciona un usuario para sincronizar.");
+    abrirModalUsuarios();
+    return;
+  }
+  if (!u.token) {
+    estado("Ese usuario no tiene token de GitHub.");
+    abrirModalUsuarios();
+    editarUsuario(u.id);
+    alert('Ese usuario no tiene token de GitHub.\n\nEdítalo y pega un token con permiso «repo».');
+    return;
+  }
+  const cab = {
+    Authorization: "token " + u.token,
+    Accept: "application/vnd.github.v3+json",
+  };
+  estado(`Sincronizando con @${u.github}…`);
+  try {
+    const remoto = await leerRemoto(u, cab);
+    if (!remoto) {
+      const docSync = JSON.parse(JSON.stringify(doc));
+      docSync.sincronizado = new Date().toISOString();
+      await subirJSON(u, cab, docSync);
+      persistirDoc();
+      estado(`Sincronizado con @${u.github}: subida inicial a GitHub.`);
+      return;
+    }
+    const fusionado = fusionarDocs(doc, remoto);
+    const cambioLocal = JSON.stringify(fusionado) !== JSON.stringify(doc);
+    if (cambioLocal) {
+      doc = fusionado;
+      await persistirDoc();
+      renderizarSelector();
+      rellenarFormulario();
+    }
+    await subirJSON(u, cab, fusionado);
+    const hora = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    estado(`Sincronizado con @${u.github} (${hora}).`);
+  } catch (e) {
+    estado("Error de sincronización.");
+    alert(`No se pudo sincronizar con @${u.github}.\n\n${e.message}\n\nComprueba el usuario, el token y el repositorio.`);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* actualizaciones                                                     */
+/* ------------------------------------------------------------------ */
+
+function versionMayor(a, b) {
+  const p = (s) => String(s || "").trim().replace(/^v/i, "").split(".").map((x) => parseInt(x, 10) || 0);
+  const A = p(a);
+  const B = p(b);
+  for (let i = 0; i < 3; i++) {
+    if ((B[i] || 0) > (A[i] || 0)) return true;
+    if ((B[i] || 0) < (A[i] || 0)) return false;
+  }
+  return false;
+}
+
+/* Consulta la última versión publicada. Con servidor usa /api/actualizacion;
+   sin servidor (Android) consulta directamente la API pública de GitHub. */
+async function consultarActualizacion() {
+  if (!localMode) {
+    const r = await fetch("/api/actualizacion", { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
+  const r = await fetch(`${GH_API}/repos/${GH_REPO_ORIGEN}/releases/latest`);
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  return {
+    actual: APP_VERSION,
+    nueva: String(j.tag_name || "").replace(/^[vV]/, ""),
+    notas: j.body || "",
+    pagina: j.html_url || "",
+  };
+}
+
+function hayNovedad(info) {
+  return !!info && !!info.nueva &&
+    (info.hay !== undefined ? !!info.hay : versionMayor(info.actual, info.nueva));
+}
+
+function mostrarBannerActualizacion(info) {
+  $("banner-act-texto").textContent =
+    `Estás en la v${info.actual || "?"} y la última publicada es la v${info.nueva}.`;
+  $("banner-act").hidden = false;
+}
+
+async function comprobarActualizacionAlArrancar() {
+  try {
+    const info = await consultarActualizacion();
+    infoActualizacion = info;
+    if (hayNovedad(info)) mostrarBannerActualizacion(info);
+  } catch (e) {
+    /* sin conexión en el arranque: se intenta otra vez con el botón Actualizar */
+  }
+}
+
+async function comprobarActualizacionManual() {
+  estado("Comprobando actualizaciones…");
+  try {
+    const info = await consultarActualizacion();
+    infoActualizacion = info;
+    if (hayNovedad(info)) {
+      mostrarBannerActualizacion(info);
+      estado(`Hay una versión nueva: v${info.nueva}.`);
+    } else {
+      $("banner-act").hidden = true;
+      const actual = info.actual || APP_VERSION || "desconocida";
+      estado(`Estás al día: v${actual}.`);
+    }
+  } catch (e) {
+    estado("No se pudo comprobar las actualizaciones.");
+    alert("No se pudo comprobar las actualizaciones.\n\n" + (e.message || e) +
+      "\n\nComprueba la conexión a internet.");
+  }
+}
+
+async function aplicarActualizacion() {
+  const info = infoActualizacion;
+  if (!info || !info.nueva) return;
+  if (localMode) {
+    /* en el móvil la app no se puede auto-instalar: se abre la descarga del .apk */
+    const ok = confirm(
+      `La versión v${info.nueva} está disponible.\n\n` +
+      `En el teléfono hay que descargar e instalar el nuevo .apk manualmente.\n` +
+      `¿Abrir la página de descarga?`
+    );
+    if (ok) window.open(info.pagina || `${GH_REPO_ORIGEN}/releases/latest`, "_blank");
+    return;
+  }
+  estado("Descargando la actualización…");
+  try {
+    const resp = await fetch("/api/actualizar", { method: "POST" });
+    const j = await resp.json();
+    if (j.aplicada) {
+      $("banner-act").hidden = true;
+      estado(`¡Actualizado a v${j.nueva_version || j.tag}! Reiniciando…`);
+      setTimeout(() => {
+        fetch("/api/reiniciar", { method: "POST" }).catch(() => {});
+        setTimeout(() => {
+          try { location.reload(); } catch (e) { /* el servidor estaba reiniciándose */ }
+        }, 1800);
+      }, 500);
+    } else if (j.razon === "instalado") {
+      $("banner-act").hidden = true;
+      alert(
+        `Hay una versión nueva (v${j.tag}).\n\n` +
+        `La copia instalada no puede actualizarse sola.\n` +
+        `Descarga el nuevo paquete e instálalo con:\n\n` +
+        `  sudo apt install ./bitacorabee_${j.tag}_amd64.deb\n\n` +
+        `El paquete se descargará en tu carpeta de Descargas.`
+      );
+      if (j.deb_url) window.open(j.deb_url, "_blank");
+    } else if (j.razon === "sin-release") {
+      estado("Ya estás en la última versión.");
+    } else {
+      estado("No se pudo actualizar.");
+      alert("No se pudo actualizar: " + (j.detalle || j.razon || "error desconocido"));
+    }
+  } catch (e) {
+    estado("No se pudo actualizar.");
+    alert("No se pudo actualizar.\n\n" + (e.message || e));
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* eventos y arranque                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -707,25 +1222,64 @@ function enlazarFormulario() {
   $("modal-hojas").addEventListener("click", (ev) => {
     if (ev.target === $("modal-hojas")) cerrarModalHojas();
   });
+
+  $("btn-sincronizar").addEventListener("click", sincronizar);
+  $("btn-usuarios").addEventListener("click", abrirModalUsuarios);
+  $("btn-cerrar-usuarios").addEventListener("click", cerrarModalUsuarios);
+  $("btn-guardar-usuario").addEventListener("click", guardarUsuarioForm);
+  $("btn-eliminar-usuario").addEventListener("click", () => {
+    if (editandoUsuario) eliminarUsuario(editandoUsuario);
+  });
+  $("btn-cancelar-usuario").addEventListener("click", limpiarFormUsuario);
+  $("modal-usuarios").addEventListener("click", (ev) => {
+    if (ev.target === $("modal-usuarios")) cerrarModalUsuarios();
+  });
+
+  $("btn-actualizar").addEventListener("click", comprobarActualizacionManual);
+  $("btn-banner-actualizar").addEventListener("click", aplicarActualizacion);
+  $("btn-banner-cerrar").addEventListener("click", () => {
+    $("banner-act").hidden = true;
+  });
+
+  $("btn-credenciales").addEventListener("click", () => { $("modal-credenciales").hidden = false; });
+  $("btn-cerrar-credenciales").addEventListener("click", () => { $("modal-credenciales").hidden = true; });
+  $("modal-credenciales").addEventListener("click", (ev) => {
+    if (ev.target === $("modal-credenciales")) $("modal-credenciales").hidden = true;
+  });
+
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && !$("modal-hojas").hidden) cerrarModalHojas();
+    if (ev.key === "Escape") {
+      if (!$("modal-hojas").hidden) cerrarModalHojas();
+      else if (!$("modal-usuarios").hidden) cerrarModalUsuarios();
+      else if (!$("modal-credenciales").hidden) $("modal-credenciales").hidden = true;
+    }
   });
 }
 
 async function arrancar() {
-  $("version-app").textContent = "";
-  try {
-    const r = await fetch("/api/version", { cache: "no-store" });
-    const j = await r.json();
-    if (j && j.version) $("version-app").textContent = (j.nombre || "Bitácora BEE") + " v" + j.version;
-  } catch (e) { /* sin servidor (Android, modo local) */ }
+  const ano = $("ano-copy");
+  if (ano) ano.textContent = String(new Date().getFullYear());
   construirCabecera();
   construirActividades();
   enlazarFormulario();
   await cargarDatos();
+  await cargarUsuarios();
+  actualizarChipUsuarios();
   renderizarSelector();
   rellenarFormulario();
-  estado("Listo. Los cambios se guardan automáticamente.");
+  $("version-app").textContent = "";
+  if (localMode) {
+    if (APP_VERSION) $("version-app").textContent = "Bitácora BEE v" + APP_VERSION;
+    estado("Modo sin servidor: los cambios se guardan en este dispositivo.");
+  } else {
+    try {
+      const r = await fetch("/api/version", { cache: "no-store" });
+      const j = await r.json();
+      if (j && j.version) $("version-app").textContent = (j.nombre || "Bitácora BEE") + " v" + j.version;
+    } catch (e) { /* sin servidor */ }
+    estado("Listo. Los cambios se guardan automáticamente.");
+  }
+  comprobarActualizacionAlArrancar();
 }
 
 document.addEventListener("DOMContentLoaded", arrancar);
