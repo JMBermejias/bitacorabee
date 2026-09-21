@@ -50,6 +50,7 @@ let infoActualizacion = null; /* última información de actualización consulta
 let sucioDoc = false;         /* hay cambios locales sin guardar */
 let sincronizando = false;    /* evita solaparse las sincronizaciones */
 let timerAutoSync = null;     /* intervalo de sincronización automática */
+let ultimoSync = null;        /* {ok, cuando, detalle} de la última sincronización */
 
 /* ------------------------------------------------------------------ */
 /* utilidades                                                          */
@@ -962,6 +963,7 @@ function guardarDireccionSync() {
   guardarUsuarios();
   arrancarAutoSync();
   estado(`Dirección de sincronización guardada: ${dir}.`);
+  sincronizar(false);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1001,6 +1003,31 @@ async function persistirDoc() {
   }
 }
 
+function detalleSync(ok, detalle) {
+  ultimoSync = { ok: !!ok, cuando: new Date(), detalle: String(detalle || "").slice(0, 120) };
+  const chip = $("sync-estado");
+  if (chip) {
+    chip.hidden = false;
+    chip.classList.toggle("sync-ok", ultimoSync.ok);
+    chip.classList.toggle("sync-ko", !ultimoSync.ok);
+    const h = ultimoSync.cuando.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    chip.textContent = ultimoSync.ok ? `✓ ${h}` : `✗ ${h}`;
+    chip.title = ultimoSync.detalle;
+  }
+  const parr = $("estado-sync");
+  if (parr) {
+    if (ultimoSync.ok) {
+      parr.hidden = true;
+    } else {
+      parr.hidden = false;
+      parr.textContent = `Última sincronización fallida (${hora_sync()}): ${ultimoSync.detalle}`;
+    }
+  }
+}
+function hora_sync() {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 async function sincronizar(silencio) {
   if (sincronizando) return;
   sincronizando = true;
@@ -1018,19 +1045,23 @@ async function sincronizar(silencio) {
     }
     const base = "http://" + dir;
     if (!silencio) estado(`Sincronizando con ${dir}…`);
-    const hora = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     try {
-      const resp = await fetch(base + "/api/datos", { cache: "no-store" });
+      const control = new AbortController();
+      const timeoutId = setTimeout(() => control.abort(), 8000);
+      const resp = await fetch(base + "/api/datos", { cache: "no-store", signal: control.signal });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const remoto = await resp.json();
       if (!remoto || !Array.isArray(remoto.visitas)) {
+        clearTimeout(timeoutId);
         throw new Error("El servidor no devolvió una bitácora válida");
       }
       const fusionado = fusionarDocs(doc, remoto);
       const hayLocal = JSON.stringify(fusionado) !== JSON.stringify(doc);
       const hayRemoto = JSON.stringify(fusionado) !== JSON.stringify(remoto);
       if (!hayLocal && !hayRemoto) {
-        if (!silencio) estado(`Sincronizado con ${dir}, sin cambios (${hora()}).`);
+        clearTimeout(timeoutId);
+        detalleSync(true, `Sin cambios en ${dir}.`);
+        if (!silencio) estado(`Sincronizado con ${dir}, sin cambios (${hora_sync()}).`);
         return;
       }
       if (hayLocal) {
@@ -1044,16 +1075,23 @@ async function sincronizar(silencio) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(fusionado),
       });
+      clearTimeout(timeoutId);
       if (!put.ok) throw new Error("HTTP " + put.status);
-      estado(`Sincronizado con ${dir} (${hora()}).`);
+      detalleSync(true, `Sincronizado con ${dir}.`);
+      estado(`Sincronizado con ${dir} (${hora_sync()}).`);
     } catch (e) {
-      if (silencio) return;
-      estado("Error de sincronización.");
-      alert(
-        `No se pudo sincronizar con ${dir}.\n\n${e.message}\n\n` +
-        "Comprueba que el servidor esté abierto, que ambos equipos estén en la misma red " +
-        "y que la dirección (IP:puerto) sea correcta."
-      );
+      const mensaje = (e && e.name === "AbortError")
+        ? "El servidor no responde (¿en la misma WiFi y encendido?)."
+        : (e && e.message) || String(e);
+      detalleSync(false, mensaje);
+      if (!silencio) {
+        estado("Error de sincronización.");
+        alert(
+          `No se pudo sincronizar con ${dir}.\n\n${mensaje}\n\n` +
+          "Comprueba que el servidor esté abierto, que ambos equipos estén en la misma red " +
+          "y que la dirección (IP:puerto) sea correcta."
+        );
+      }
     }
   } finally {
     sincronizando = false;

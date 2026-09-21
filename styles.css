@@ -472,6 +472,24 @@ textarea { resize: vertical; min-height: 74px; }
   padding: 10px 14px;
   margin: 14px 0 0;
 }
+.sync-estado {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+.sync-estado.sync-ok { background: #dff2e4; color: #1d7a3c; }
+.sync-estado.sync-ko { background: #fbe3e3; color: #b3261e; }
+.estado-sync {
+  font-size: 12.5px;
+  color: #b3261e;
+  background: #fbe3e3;
+  border-left: 4px solid #b3261e;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 10px 0 0;
+}
 
 .modal-pie {
   display: flex;

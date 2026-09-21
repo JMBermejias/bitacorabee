@@ -25,6 +25,7 @@
     <button id="btn-hojas" class="btn btn-claro" title="Ver y gestionar todas las revisiones guardadas">Hojas</button>
     <button id="btn-nueva" class="btn btn-claro" title="Crear una nueva revisión en blanco">Nueva</button>
     <button id="btn-sincronizar" class="btn btn-verde" title="Sincronizar la bitácora con otro dispositivo de la red local">Sincronizar</button>
+    <span id="sync-estado" class="sync-estado" hidden></span>
     <button id="btn-usuarios" class="btn btn-claro" title="Gestionar usuarios de sincronización">Usuarios</button>
     <button id="btn-actualizar" class="btn btn-claro" title="Comprobar si hay una versión nueva">Actualizar</button>
     <button id="btn-guardar" class="btn btn-verde">Guardar</button>
@@ -233,8 +234,12 @@
         botón <b>Sincronizar</b> de la barra superior la fuerza en cualquier
         momento. En el ordenador, si esta aplicación es el servidor, déjalo en
         «Usar este aparato como servidor». También funciona entre dos
-        ordenadores de la misma red.
+        ordenadores de la misma red. Si no sincroniza, comprueba en el
+        navegador del móvil abriendo <b>http://IP:puerto</b>: si esa página
+        no carga, el ordenador y el móvil no están en la misma red o el
+        cortafuegos del ordenador bloquea el puerto.
       </p>
+      <p id="estado-sync" class="estado-sync" hidden></p>
     </div>
   </div>
 </div>
