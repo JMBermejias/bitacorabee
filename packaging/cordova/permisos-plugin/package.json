@@ -1,0 +1,12 @@
+{
+  "name": "permisos-bitacora",
+  "version": "1.0.0",
+  "description": "Declara el permiso de cámara en el AndroidManifest del APK.",
+  "main": "index.js",
+  "cordova": {
+    "id": "permisos-bitacora",
+    "platforms": [
+      "android"
+    ]
+  }
+}
