@@ -765,6 +765,7 @@ function abrirModalUsuarios() {
   limpiarFormUsuario();
   $("sync-direccion").value = servidorSync;
   mostrarPistaServidor();
+  consultarEstadoNube();
   $("modal-usuarios").hidden = false;
 }
 
@@ -905,7 +906,6 @@ function eliminarUsuario(id) {
 function normalizarDireccion(dir) {
   if (!dir) return "";
   let s = String(dir).trim();
-  s = s.replace(/^https?:\/\//i, "");
   s = s.replace(/\/+$/, "");
   return s;
 }
@@ -1049,7 +1049,7 @@ async function sincronizar(silencio) {
       }
       return;
     }
-    const base = "http://" + dir;
+    const base = /^https?:\/\//i.test(dir) ? dir : "http://" + dir;
     pintarEstadoSync("…", "", `Sincronizando con ${dir}…`);
     if (!silencio) estado(`Sincronizando con ${dir}…`);
     try {
@@ -1126,6 +1126,63 @@ function arrancarAutoSync() {
 }
 
 /* ------------------------------------------------------------------ */
+/* sincronización por internet (nube, túnel Cloudflare)                */
+/* ------------------------------------------------------------------ */
+
+async function consultarEstadoNube() {
+  if (localMode) return;
+  try {
+    const r = await fetch("/api/nube/estado", { cache: "no-store" });
+    if (!r.ok) return;
+    const j = await r.json();
+    pintarEstadoNube(j);
+  } catch (e) { /* servidor antiguo o sin nube */ }
+}
+
+function pintarEstadoNube(j) {
+  if (!$("nube-estado")) return;
+  const activa = !!(j && j.activa);
+  if ($("btn-nube-activar")) $("btn-nube-activar").hidden = activa;
+  if ($("btn-nube-apagar")) $("btn-nube-apagar").hidden = !activa;
+  $("nube-estado").textContent = (j && j.detalle) || "";
+  if (activa && j.url && $("sync-direccion") && !$("sync-direccion").value) {
+    $("sync-direccion").value = j.url;
+  }
+}
+
+async function activarNube() {
+  if (localMode) {
+    alert("La nube se activa desde el ordenador (el servidor), no en el móvil.");
+    return;
+  }
+  estado("Conectando a internet…");
+  try {
+    const r = await fetch("/api/nube/activar", { method: "POST" });
+    const j = await r.json();
+    pintarEstadoNube(j);
+    if (j && j.url) {
+      $("sync-direccion").value = j.url;
+      guardarDireccionSync();
+      estado(`Nube activa: ${j.url}`);
+      $("qr-texto").hidden = true;
+    } else if (j && j.detalle) {
+      estado(j.detalle + " Se intenta otra vez en unos segundos.");
+      setTimeout(consultarEstadoNube, 8000);
+    }
+  } catch (e) {
+    estado("No se pudo activar la nube: " + ((e && e.message) || e));
+  }
+}
+
+async function apagarNube() {
+  try {
+    await fetch("/api/nube/apagar", { method: "POST" });
+  } catch (e) { /* se ignora */ }
+  await consultarEstadoNube();
+  estado("Nube desconectada.");
+}
+
+/* ------------------------------------------------------------------ */
 /* emparejamiento por código QR (sin teclear nada)                     */
 /* ------------------------------------------------------------------ */
 
@@ -1141,7 +1198,9 @@ function mostrarQrEnOrdenador() {
     .then((j) => {
       const ip = (j.ips && j.ips[0]) || "127.0.0.1";
       const puerto = j.puerto || "8000";
-      const url = "http://" + ip + ":" + puerto + "/";
+      const url = (j.url_publica && /^https?:\/\//i.test(j.url_publica))
+        ? j.url_publica.replace(/\/+$/, "") + "/"
+        : "http://" + ip + ":" + puerto + "/";
       const cont = $("qr-canvas");
       cont.innerHTML = "";
       try {
@@ -1172,7 +1231,7 @@ function aplicarDireccionQr(datos) {
     $("qr-texto").hidden = false;
     return;
   }
-  if (!/:\d+$/.test(dir)) dir += ":8000";
+  if (!/:\d+$/.test(dir) && !/^https:\/\//i.test(dir)) dir += ":8000";
   $("sync-direccion").value = dir;
   $("qr-texto").hidden = true;
   guardarDireccionSync();
@@ -1479,6 +1538,8 @@ function enlazarFormulario() {
   $("btn-detener-esc").addEventListener("click", detenerEscaneoCamara);
   $("btn-esc-foto").addEventListener("click", () => $("file-esc-qr").click());
   $("file-esc-qr").addEventListener("change", escanearQr);
+  $("btn-nube-activar").addEventListener("click", activarNube);
+  $("btn-nube-apagar").addEventListener("click", apagarNube);
   $("modal-usuarios").addEventListener("click", (ev) => {
     if (ev.target === $("modal-usuarios")) cerrarModalUsuarios();
   });

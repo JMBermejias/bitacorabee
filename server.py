@@ -16,8 +16,11 @@ Autor: Jose Manuel Bernabeu Mejias <apicolanovelda@gmail.com>
 
 import json
 import os
+import re
 import shutil
+import signal
 import socket
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -160,6 +163,176 @@ def _consulta_release():
         }
     except Exception as e:
         return {"tag": "", "nombre": "", "notas": "", "pagina": "", "deb_url": "", "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Sincronización por internet ("nube"): túnel de Cloudflare sin cuenta.
+# cloudflared se descarga automáticamente la primera vez y expone el servidor
+# local con una dirección pública https://xxxx.trycloudflare.com, que el móvil
+# puede alcanzar desde cualquier lugar.
+# ---------------------------------------------------------------------------
+
+_URL_CLOUDFLARED = (
+    "https://github.com/cloudflare/cloudflared/releases/latest/download/"
+    "cloudflared-linux-amd64"
+)
+_NUBE_LOG = os.path.join(DATOS_DIR, "nube_cloudflared.log")
+_NUBE_ESTADO_FICHERO = os.path.join(DATOS_DIR, "nube.json")
+_PATRON_URL_NUBE = re.compile(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com")
+_ESTADO_NUBE = {"pid": None, "url": "", "activa": False, "listo": False, "detalle": ""}
+_BLOQUEO_NUBE = threading.Lock()
+_PUERTO_SERVIDOR = 8000
+
+
+def _nube_estado():
+    with _BLOQUEO_NUBE:
+        return dict(_ESTADO_NUBE)
+
+
+def _nube_bin():
+    ruta = os.path.join(DATOS_DIR, "cloudflared")
+    return ruta if os.path.exists(ruta) and os.access(ruta, os.X_OK) else None
+
+
+def _nube_descargar():
+    ruta = os.path.join(DATOS_DIR, "cloudflared")
+    try:
+        req = urllib.request.Request(_URL_CLOUDFLARED, headers={"User-Agent": APP_NOMBRE})
+        with urllib.request.urlopen(req, timeout=180) as r:
+            with open(ruta, "wb") as f:
+                shutil.copyfileobj(r, f)
+        os.chmod(ruta, 0o755)
+        return ruta
+    except Exception as e:
+        _ESTADO_NUBE["detalle"] = "No se pudo descargar cloudflared: " + str(e)
+        return None
+
+
+def _nube_proceso_vivo(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def _nube_leer_url():
+    try:
+        with open(_NUBE_LOG, "r", encoding="utf-8", errors="ignore") as f:
+            texto = f.read()
+        m = _PATRON_URL_NUBE.search(texto)
+        return m.group(0) if m else ""
+    except Exception:
+        return ""
+
+
+def _nube_guardar_estado():
+    try:
+        with open(_NUBE_ESTADO_FICHERO, "w", encoding="utf-8") as f:
+            json.dump({"pid": _ESTADO_NUBE["pid"], "url": _ESTADO_NUBE["url"],
+                       "activa": _ESTADO_NUBE["activa"], "listo": _ESTADO_NUBE["listo"]}, f)
+    except Exception:
+        pass
+
+
+def _nube_activar():
+    with _BLOQUEO_NUBE:
+        if _ESTADO_NUBE["activa"] and _ESTADO_NUBE["listo"] and not _ESTADO_NUBE["url"]:
+            _ESTADO_NUBE["url"] = _nube_leer_url()
+        if _ESTADO_NUBE["activa"] and _ESTADO_NUBE["listo"] and _ESTADO_NUBE["url"]:
+            return dict(_ESTADO_NUBE)
+        if _ESTADO_NUBE["activa"] and not _ESTADO_NUBE["pid"]:
+            _ESTADO_NUBE["activa"] = False
+        if not _ESTADO_NUBE["activa"]:
+            binario = _nube_bin() or _nube_descargar()
+            if not binario:
+                _ESTADO_NUBE["detalle"] = "No se pudo activar la nube."
+                return dict(_ESTADO_NUBE)
+            try:
+                log = open(_NUBE_LOG, "a", encoding="utf-8")
+            except Exception:
+                log = None
+            try:
+                proc = subprocess.Popen(
+                    [binario, "tunnel", "--url", "http://127.0.0.1:%d" % _PUERTO_SERVIDOR,
+                     "--no-autoupdate"],
+                    stdout=(log or subprocess.DEVNULL), stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+            except Exception as e:
+                _ESTADO_NUBE["detalle"] = "cloudflared no arrancó: " + str(e)
+                return dict(_ESTADO_NUBE)
+            _ESTADO_NUBE["pid"] = proc.pid
+            _ESTADO_NUBE["activa"] = True
+            _ESTADO_NUBE["listo"] = False
+            _ESTADO_NUBE["detalle"] = "Conectando a internet…"
+        # esperar a que Cloudflare asigne la dirección pública
+        for _ in range(40):
+            url = _nube_leer_url()
+            if url:
+                _ESTADO_NUBE["url"] = url
+                _ESTADO_NUBE["listo"] = True
+                _ESTADO_NUBE["detalle"] = (
+                    "Conectado. El móvil puede sincronizar desde cualquier lugar. "
+                    "Escanea el QR o guarda esta dirección.")
+                break
+            if not _nube_proceso_vivo(_ESTADO_NUBE["pid"]):
+                _ESTADO_NUBE["detalle"] = "cloudflared se detuvo. Mira el log o reintenta."
+                break
+            time.sleep(0.5)
+        else:
+            _ESTADO_NUBE["detalle"] = "Cloudflare aún no dio dirección: reintenta en unos segundos."
+        _nube_guardar_estado()
+        return dict(_ESTADO_NUBE)
+
+
+def _nube_apagar():
+    with _BLOQUEO_NUBE:
+        pid = _ESTADO_NUBE.get("pid")
+        if pid:
+            for senal in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(pid, senal)
+                    break
+                except Exception:
+                    try:
+                        os.kill(pid, senal)
+                        break
+                    except Exception:
+                        continue
+        nube_ant = dict(_ESTADO_NUBE)
+        _ESTADO_NUBE.update({"pid": None, "url": "", "activa": False,
+                             "listo": False, "detalle": "Nube desconectada."})
+        # si terminaba activa se conserva "apagada" en disco
+        nube_ant["activa"] = False
+        nube_ant["pid"] = None
+        try:
+            with open(_NUBE_ESTADO_FICHERO, "w", encoding="utf-8") as f:
+                json.dump(nube_ant, f)
+        except Exception:
+            pass
+        return dict(_ESTADO_NUBE)
+
+
+def _nube_restaurar():
+    """Al arrancar retoma el túnel si quedó activo (crashes, reinicios)."""
+    try:
+        with open(_NUBE_ESTADO_FICHERO, "r", encoding="utf-8") as f:
+            guardado = json.load(f)
+    except Exception:
+        return
+    if not guardado.get("activa"):
+        return
+    _ESTADO_NUBE["activa"] = True
+    if guardado.get("pid") and _nube_proceso_vivo(guardado["pid"]):
+        _ESTADO_NUBE["pid"] = guardado["pid"]
+        _ESTADO_NUBE["url"] = guardado.get("url", "")
+        _ESTADO_NUBE["listo"] = True
+        _ESTADO_NUBE["detalle"] = "Nube activa desde el arranque anterior."
+    else:
+        _ESTADO_NUBE["pid"] = None
+        _ESTADO_NUBE["detalle"] = "Se retoma la nube…"
+        threading.Thread(target=_nube_activar, daemon=True).start()
 
 
 def _aplicar_actualizacion(info):
@@ -359,8 +532,12 @@ class Handler(SimpleHTTPRequestHandler):
                     "puerto": self.server.server_address[1],
                     "nombre": APP_NOMBRE,
                     "version": _leer_version(),
+                    "url_publica": _ESTADO_NUBE.get("url", "") or "",
                 },
             )
+            return
+        if ruta == "/api/nube/estado":
+            self._json(200, _nube_estado())
             return
         super().do_GET()
 
@@ -412,6 +589,12 @@ class Handler(SimpleHTTPRequestHandler):
             threading.Thread(target=_reiniciar, daemon=True).start()
             self._json(200, {"ok": True, "reiniciando": True})
             return
+        if ruta == "/api/nube/activar":
+            self._json(200, _nube_activar())
+            return
+        if ruta == "/api/nube/apagar":
+            self._json(200, _nube_apagar())
+            return
         self._json(404, {"error": "Ruta no encontrada"})
 
     def log_message(self, fmt, *args):
@@ -449,6 +632,8 @@ def main():
             print("El puerto debe ser un número. Se usa", PUERTO_DEFECTO)
             puerto = PUERTO_DEFECTO
     puerto = _puerto_libre(puerto)
+    global _PUERTO_SERVIDOR
+    _PUERTO_SERVIDOR = puerto
 
     # Se escucha en toda la red local (no solo en este equipo) para que el
     # móvil u otros ordenadores puedan sincronizar. Para restringirlo:
@@ -475,6 +660,11 @@ def main():
                 print(f"  Otros dispositivos (móvil): http://{ip}:{puerto}/")
         except Exception:
             pass
+    _nube_restaurar()
+    url_nube = _ESTADO_NUBE.get("url")
+    if url_nube:
+        print(f"  MODALIDAD NUBE activa: {url_nube}")
+        print("  El móvil puede sincronizar desde internet. Para pararla: Usuarios → Desconectar nube.")
     print(f"  Datos guardados en: {DATOS_DIR}")
     print("  Pulsa Ctrl+C para detener el servidor.")
     print("=" * 62)
