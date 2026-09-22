@@ -1125,6 +1125,92 @@ function arrancarAutoSync() {
 }
 
 /* ------------------------------------------------------------------ */
+/* emparejamiento por código QR (sin teclear nada)                     */
+/* ------------------------------------------------------------------ */
+
+function mostrarQrEnOrdenador() {
+  if (localMode) {
+    alert("En el móvil el código no se genera: se escanea.\n\nEn el ordenador (que hace de servidor) entra en «Usuarios» y pulsa «Mostrar código QR»; desde el móvil escanéalo con la cámara.");
+    return;
+  }
+  const texto = $("qr-texto");
+  texto.hidden = true;
+  fetch("/api/red", { cache: "no-store" })
+    .then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then((j) => {
+      const ip = (j.ips && j.ips[0]) || "127.0.0.1";
+      const puerto = j.puerto || "8000";
+      const url = "http://" + ip + ":" + puerto + "/";
+      const cont = $("qr-canvas");
+      cont.innerHTML = "";
+      try {
+        new QRCode(cont, {
+          text: url, width: 240, height: 240,
+          colorDark: "#000000", colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M,
+        });
+      } catch (e) {
+        texto.hidden = false;
+        texto.textContent = "No se pudo dibujar el código QR.";
+        return;
+      }
+      $("qr-canvas-zona").hidden = false;
+      $("sync-direccion").value = ip + ":" + puerto;
+      estado("Escanea el código con el móvil para conectar.");
+    })
+    .catch(() => {
+      texto.hidden = false;
+      texto.textContent = "No se pudo generar el código: este dispositivo no es el servidor.";
+    });
+}
+
+function aplicarDireccionQr(datos) {
+  let dir = normalizarDireccion(String(datos || "").trim());
+  if (!dir) {
+    $("qr-texto").textContent = "Ese código no contiene una dirección válida.";
+    $("qr-texto").hidden = false;
+    return;
+  }
+  if (!/:\d+$/.test(dir)) dir += ":8000";
+  $("sync-direccion").value = dir;
+  $("qr-texto").hidden = true;
+  guardarDireccionSync();
+  estado(`Escaneado: ${dir}. Conectando…`);
+}
+
+function escanearQr(ev) {
+  const archivo = ev.target.files && ev.target.files[0];
+  ev.target.value = "";
+  if (!archivo) return;
+  const img = new Image();
+  img.onload = function () {
+    const l = document.createElement("canvas");
+    l.width = img.width;
+    l.height = img.height;
+    const ctx = l.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    let datos = null;
+    try { datos = ctx.getImageData(0, 0, l.width, l.height); } catch (e) { datos = null; }
+    if (datos) {
+      const codigo = jsQR(datos.data, datos.width, datos.height);
+      if (codigo && codigo.data) {
+        aplicarDireccionQr(codigo.data);
+        URL.revokeObjectURL(img.src);
+        return;
+      }
+    }
+    URL.revokeObjectURL(img.src);
+    $("qr-texto").textContent = "No se pudo leer el código QR. Acércate, enfoca bien y vuelve a intentarlo.";
+    $("qr-texto").hidden = false;
+  };
+  img.onerror = function () {
+    $("qr-texto").textContent = "No se pudo abrir la foto del código.";
+    $("qr-texto").hidden = false;
+  };
+  img.src = URL.createObjectURL(archivo);
+}
+
+/* ------------------------------------------------------------------ */
 /* actualizaciones                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -1294,6 +1380,9 @@ function enlazarFormulario() {
   $("btn-cancelar-usuario").addEventListener("click", limpiarFormUsuario);
   $("btn-guardar-sync").addEventListener("click", guardarDireccionSync);
   $("btn-usar-este-aparato").addEventListener("click", usarEsteAparatoComoServidor);
+  $("btn-mostrar-qr").addEventListener("click", mostrarQrEnOrdenador);
+  $("btn-escanear-qr").addEventListener("click", () => $("file-esc-qr").click());
+  $("file-esc-qr").addEventListener("change", escanearQr);
   $("modal-usuarios").addEventListener("click", (ev) => {
     if (ev.target === $("modal-usuarios")) cerrarModalUsuarios();
   });
@@ -1336,6 +1425,7 @@ async function arrancar() {
   } else {
     pintarEstadoSync("sin dir.", "", "Sin dirección de sincronización: configúrala en Usuarios.");
   }
+  if ($("btn-mostrar-qr")) $("btn-mostrar-qr").hidden = localMode;
   $("version-app").textContent = "";
   if (localMode) {
     if (APP_VERSION) $("version-app").textContent = "Bitácora BEE v" + APP_VERSION;

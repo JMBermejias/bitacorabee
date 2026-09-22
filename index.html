@@ -240,6 +240,24 @@
         cortafuegos del ordenador bloquea el puerto.
       </p>
       <p id="estado-sync" class="estado-sync" hidden></p>
+
+      <h3>Sin teclear nada: código QR</h3>
+      <div class="qr-zona">
+        <div class="qr-botones">
+          <button id="btn-mostrar-qr" class="btn btn-claro" hidden>Mostrar código QR</button>
+          <button id="btn-escanear-qr" class="btn btn-verde">Escanear con la cámara</button>
+          <input id="file-esc-qr" type="file" accept="image/*" capture="environment" hidden>
+        </div>
+        <div id="qr-canvas-zona" hidden>
+          <div id="qr-canvas" class="qr-canvas"></div>
+          <p class="pista-sync">
+            Con esta app abierta en el móvil, pulsa <b>«Escanear con la cámara»</b>
+            y apunta al código. La dirección queda guardada y la sincronización
+            arranca sola.
+          </p>
+        </div>
+        <p id="qr-texto" class="estado-sync" hidden></p>
+      </div>
     </div>
   </div>
 </div>
@@ -279,6 +297,8 @@
   </div>
 </div>
 
+<script src="vendor/qrcode.min.js"></script>
+<script src="vendor/jsqr.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -52,13 +52,16 @@ dispositivos (ordenador y móvil) en la misma red local:
 1. **Ordenador**: deja Bitácora BEE abierta. Al arrancar muestra la dirección
    de la red local (ej. `http://192.168.1.10:8000/`) y sirve la bitácora al
    resto de dispositivos de la red.
-2. **Móvil**: abre **Usuarios**, escribe la dirección del ordenador
+2. **Sin teclear nada (recomendado, código QR)**: en el ordenador abre
+   **Usuarios → Mostrar código QR**; en el móvil abre **Usuarios → Escanear
+   con la cámara** y apunta al código. La dirección se guarda sola.
+3. **Manual (si lo prefieres)**: en el móvil escribe la dirección del ordenador
    (`IP:puerto`, ej. `192.168.1.10:8000`) y pulsa **Guardar dirección**.
-3. Desde entonces **sincroniza automáticamente**: al abrir la app y cada
+4. Desde entonces **sincroniza automáticamente**: al abrir la app y cada
    30 segundos mientras haya dirección guardada se intercambian las hojas
    (fusionan) y quedan en ambos dispositivos. También puedes pulsar
    **Sincronizar** en cualquier momento para forzarlo.
-4. También se puede sincronizar entre dos ordenadores de la misma red
+5. También se puede sincronizar entre dos ordenadores de la misma red
    (en el segundo escribe la dirección del primero).
 
 Los **operadores** son simples nombres locales (quién rellena la hoja) y se
@@ -74,6 +77,14 @@ pueden añadir, editar y eliminar; el activo se usa automáticamente como
   reinicia solo; en un paquete `.deb` instalado indica cómo descargar e
   instalar la nueva versión.
 - En el móvil: indica la nueva versión y abre la página con el `.apk` nuevo.
+
+## Código QR (sin teclear nada)
+
+El ordenador que sirve la bitácora puede mostrar un **código QR** con su
+dirección de red (Usuarios → **Mostrar código QR**) y el móvil la lee con la
+cámara (Usuarios → **Escanear con la cámara**). Así la dirección queda
+guardada sin escribir nada. Genera y lee QR con librerías MIT embebidas en
+`vendor/` (`qrcodejs` y `jsQR`); no usan Internet.
 
 ## Características
 

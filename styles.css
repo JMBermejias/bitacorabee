@@ -490,6 +490,17 @@ textarea { resize: vertical; min-height: 74px; }
   padding: 10px 14px;
   margin: 10px 0 0;
 }
+.qr-zona { margin-top: 14px; }
+.qr-botones { display: flex; gap: 10px; flex-wrap: wrap; }
+.qr-canvas {
+  display: inline-block;
+  background: #fff;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  margin: 12px 0 4px;
+}
+#qr-canvas canvas, #qr-canvas img { display: block; }
 
 .modal-pie {
   display: flex;

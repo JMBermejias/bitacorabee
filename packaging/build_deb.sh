@@ -30,6 +30,7 @@ mkdir -p "$ROOT/opt/$NAME"
 
 # Aplicación (solo estándar de Python: no hay dependencias extra)
 cp server.py index.html app.js styles.css .VERSION "$ROOT/opt/$NAME/"
+cp -r vendor "$ROOT/opt/$NAME/vendor"
 chmod 755 "$ROOT/opt/$NAME/server.py"
 
 # Lanzador

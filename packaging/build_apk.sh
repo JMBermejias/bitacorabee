@@ -27,6 +27,7 @@ rm -rf cordova-build
 mkdir -p cordova-build/www "$DIST"
 
 cp "$APP"/index.html "$APP"/app.js "$APP"/styles.css cordova-build/www/
+cp -r "$APP"/vendor cordova-build/www/vendor
 printf '\nwindow.BITACORA_VERSION = "%s";\n' "$VERSION" >> cordova-build/www/app.js
 sed -e "s/@VERSION@/$VERSION/" cordova/config.xml > cordova-build/config.xml
 
@@ -38,8 +39,22 @@ npm install --no-fund --no-audit cordova@12 >/dev/null 2>&1
 echo "==> Añadiendo plataforma Android"
 npx cordova platform add android --no-telemetry
 
+echo "==> Permitiendo tráfico HTTP local en el WebView"
+npx cordova prepare android --no-telemetry
+MANIFEST="platforms/android/app/src/main/AndroidManifest.xml"
+if [ -f "$MANIFEST" ]; then
+  if ! grep -q 'usesCleartextTraffic' "$MANIFEST"; then
+    sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$MANIFEST"
+    echo "    usesCleartextTraffic=true inyectado en el manifest"
+  else
+    echo "    usesCleartextTraffic ya presente"
+  fi
+else
+  echo "    AVISO: no se encontró el AndroidManifest.xml"
+fi
+
 echo "==> Compilando APK (debug)"
-npx cordova build android --no-telemetry
+npx cordova compile android --no-telemetry
 
 APK="platforms/android/app/build/outputs/apk/debug/app-debug.apk"
 if [ ! -f "$APK" ]; then
