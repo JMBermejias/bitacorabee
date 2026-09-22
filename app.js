@@ -51,6 +51,7 @@ let sucioDoc = false;         /* hay cambios locales sin guardar */
 let sincronizando = false;    /* evita solaparse las sincronizaciones */
 let timerAutoSync = null;     /* intervalo de sincronización automática */
 let ultimoSync = null;        /* {ok, cuando, detalle} de la última sincronización */
+let ultimoAvisoFallo = 0;     /* sello de tiempo del último aviso de fallo en pantalla */
 
 /* ------------------------------------------------------------------ */
 /* utilidades                                                          */
@@ -1003,17 +1004,20 @@ async function persistirDoc() {
   }
 }
 
+function pintarEstadoSync(texto, clase, titulo) {
+  const chip = $("sync-estado");
+  if (!chip) return;
+  chip.hidden = false;
+  chip.classList.remove("sync-ok", "sync-ko");
+  if (clase) chip.classList.add(clase);
+  chip.textContent = texto;
+  chip.title = titulo || "";
+}
+
 function detalleSync(ok, detalle) {
   ultimoSync = { ok: !!ok, cuando: new Date(), detalle: String(detalle || "").slice(0, 120) };
-  const chip = $("sync-estado");
-  if (chip) {
-    chip.hidden = false;
-    chip.classList.toggle("sync-ok", ultimoSync.ok);
-    chip.classList.toggle("sync-ko", !ultimoSync.ok);
-    const h = ultimoSync.cuando.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    chip.textContent = ultimoSync.ok ? `✓ ${h}` : `✗ ${h}`;
-    chip.title = ultimoSync.detalle;
-  }
+  const h = ultimoSync.cuando.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  pintarEstadoSync(ultimoSync.ok ? `✓ ${h}` : `✗ ${h}`, ultimoSync.ok ? "sync-ok" : "sync-ko", ultimoSync.detalle);
   const parr = $("estado-sync");
   if (parr) {
     if (ultimoSync.ok) {
@@ -1036,6 +1040,7 @@ async function sincronizar(silencio) {
     leerFormulario();
     const dir = normalizarDireccion(servidorSync);
     if (!dir) {
+      pintarEstadoSync("sin dir.", "", "Sin dirección de sincronización: configúrala en Usuarios.");
       if (!silencio) {
         estado("Indica la dirección del servidor con el que sincronizar.");
         abrirModalUsuarios();
@@ -1044,6 +1049,7 @@ async function sincronizar(silencio) {
       return;
     }
     const base = "http://" + dir;
+    pintarEstadoSync("…", "", `Sincronizando con ${dir}…`);
     if (!silencio) estado(`Sincronizando con ${dir}…`);
     try {
       const control = new AbortController();
@@ -1084,14 +1090,19 @@ async function sincronizar(silencio) {
         ? "El servidor no responde (¿en la misma WiFi y encendido?)."
         : (e && e.message) || String(e);
       detalleSync(false, mensaje);
-      if (!silencio) {
-        estado("Error de sincronización.");
-        alert(
-          `No se pudo sincronizar con ${dir}.\n\n${mensaje}\n\n` +
-          "Comprueba que el servidor esté abierto, que ambos equipos estén en la misma red " +
-          "y que la dirección (IP:puerto) sea correcta."
-        );
+      if (silencio) {
+        if (Date.now() - ultimoAvisoFallo > 120000) {
+          ultimoAvisoFallo = Date.now();
+          estado(`No conecta con ${dir}: ${ultimoSync.detalle}. Revisa «Usuarios → Sincronización».`);
+        }
+        return;
       }
+      estado("Error de sincronización.");
+      alert(
+        `No se pudo sincronizar con ${dir}.\n\n${mensaje}\n\n` +
+        "Comprueba que el servidor esté abierto, que ambos equipos estén en la misma red " +
+        "y que la dirección (IP:puerto) sea correcta."
+      );
     }
   } finally {
     sincronizando = false;
@@ -1319,7 +1330,12 @@ async function arrancar() {
   actualizarChipUsuarios();
   renderizarSelector();
   rellenarFormulario();
-  arrancarAutoSync();
+  if (normalizarDireccion(servidorSync)) {
+    pintarEstadoSync("…", "", "Dirección guardada. Sincronizando…");
+    arrancarAutoSync();
+  } else {
+    pintarEstadoSync("sin dir.", "", "Sin dirección de sincronización: configúrala en Usuarios.");
+  }
   $("version-app").textContent = "";
   if (localMode) {
     if (APP_VERSION) $("version-app").textContent = "Bitácora BEE v" + APP_VERSION;
