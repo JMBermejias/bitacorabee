@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<plugin id="permisos-bitacora" version="1.0.0"
+        xmlns="http://apache.org/cordova/ns/plugins/1.0"
+        xmlns:android="http://schemas.android.com/apk/res/android">
+    <name>Permisos de Bitácora BEE</name>
+    <description>Declara el permiso de cámara en el AndroidManifest del APK.</description>
+    <engines>
+        <engine name="cordova" version=">=10.0.0" />
+    </engines>
+    <platform name="android">
+        <config-file parent="/manifest" target="AndroidManifest.xml">
+            <uses-permission android:name="android.permission.CAMERA" />
+        </config-file>
+    </platform>
+</plugin>

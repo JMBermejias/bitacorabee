@@ -40,6 +40,9 @@ npm install --no-fund --no-audit cordova@12 >/dev/null 2>&1
 echo "==> Añadiendo plataforma Android"
 npx cordova platform add android --no-telemetry
 
+echo "==> Añadiendo plugin de permisos (cámara)"
+npx cordova plugin add ../cordova/permisos-plugin --no-telemetry
+
 echo "==> Permitiendo tráfico HTTP local en el WebView"
 npx cordova prepare android --no-telemetry
 MANIFEST="platforms/android/app/src/main/AndroidManifest.xml"
