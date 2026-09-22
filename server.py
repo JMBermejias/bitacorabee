@@ -92,24 +92,49 @@ def _version_nueva(actual, tag):
     return b > a
 
 
+def _es_ip_lan(ip):
+    """True si es una IP privada de red local (alcanzable por el móvil)."""
+    try:
+        p = str(ip or "").split(".")
+        if len(p) != 4:
+            return False
+        a = int(p[0])
+        if a == 10:
+            return True
+        if a == 192 and p[1] == "168":
+            return True
+        if a == 172 and 16 <= int(p[1]) <= 31:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _ips_locales():
     """Direcciones IP de la máquina en la red local (lo que ven otros)."""
     ips = []
+    vistos = set()
+
+    def anade(ip):
+        if ip and ip not in vistos:
+            vistos.add(ip)
+            ips.append(ip)
+
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
+        anade(s.getsockname()[0])
         s.close()
-        if ip:
-            ips.append(ip)
     except Exception:
         pass
     try:
         for x in socket.gethostbyname_ex(socket.gethostname())[2]:
-            if not x.startswith("127.") and x not in ips:
-                ips.append(x)
+            anade(x)
     except Exception:
         pass
+    aaaa = [x for x in ips if _es_ip_lan(x)]
+    extra = [x for x in ips if not _es_ip_lan(x)]
+    ips = aaaa + extra
     if not ips:
         ips.append("127.0.0.1")
     return ips
