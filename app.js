@@ -769,6 +769,7 @@ function abrirModalUsuarios() {
 }
 
 function cerrarModalUsuarios() {
+  detenerEscaneoCamara();
   $("modal-usuarios").hidden = true;
 }
 
@@ -1178,17 +1179,97 @@ function aplicarDireccionQr(datos) {
   estado(`Escaneado: ${dir}. Conectando…`);
 }
 
+let camaraEscaneo = null;   /* flujo de cámara activo */
+let bucleCamara = null;     /* temporizador de lectura del QR */
+
+async function escanearConCamara() {
+  const texto = $("qr-texto");
+  texto.hidden = true;
+  $("qr-camara-zona").hidden = true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    fallbackFotoEscaneo();
+    return;
+  }
+  try {
+    camaraEscaneo = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
+      audio: false,
+    });
+  } catch (e) {
+    fallbackFotoEscaneo();
+    if (e && (e.name === "NotAllowedError" || e.name === "PermissionDeniedError")) {
+      texto.textContent =
+        "No se dio permiso a la cámara. Actívalo en los ajustes del teléfono o usa «Elegir foto».";
+      texto.hidden = false;
+    }
+    return;
+  }
+  const video = $("qr-camara");
+  video.srcObject = camaraEscaneo;
+  $("qr-camara-zona").hidden = false;
+  $("btn-escanear-qr").hidden = true;
+  $("btn-detener-esc").hidden = false;
+  $("btn-esc-foto").hidden = false;
+  try { await video.play(); } catch (e) { /* se ignora */ }
+  bucleCamara = setInterval(leerCuadroCamara, 160);
+}
+
+function leerCuadroCamara() {
+  if (!camaraEscaneo) return;
+  const video = $("qr-camara");
+  if (!video.videoWidth) return;
+  const MAX_ALTO = 900;
+  const s = Math.min(1, MAX_ALTO / video.videoHeight);
+  const l = document.createElement("canvas");
+  l.width = Math.max(1, Math.round(video.videoWidth * s));
+  l.height = Math.max(1, Math.round(video.videoHeight * s));
+  const ctx = l.getContext("2d");
+  ctx.drawImage(video, 0, 0, l.width, l.height);
+  let datos = null;
+  try { datos = ctx.getImageData(0, 0, l.width, l.height); } catch (e) { datos = null; }
+  if (!datos) return;
+  const codigo = jsQR(datos.data, datos.width, datos.height);
+  if (codigo && codigo.data) {
+    detenerEscaneoCamara();
+    aplicarDireccionQr(codigo.data);
+  }
+}
+
+function detenerEscaneoCamara() {
+  if (bucleCamara) { clearInterval(bucleCamara); bucleCamara = null; }
+  if (camaraEscaneo) {
+    camaraEscaneo.getTracks().forEach((t) => t.stop());
+    camaraEscaneo = null;
+  }
+  const video = $("qr-camara");
+  if (video && video.srcObject) video.srcObject = null;
+  if ($("qr-camara-zona")) $("qr-camara-zona").hidden = true;
+  if ($("btn-escanear-qr")) $("btn-escanear-qr").hidden = false;
+  if ($("btn-detener-esc")) $("btn-detener-esc").hidden = true;
+}
+
+function fallbackFotoEscaneo() {
+  if ($("btn-esc-foto")) $("btn-esc-foto").hidden = false;
+  const texto = $("qr-texto");
+  if (texto && texto.hidden) {
+    texto.textContent = "La cámara directa no está disponible en este dispositivo; usa «Elegir foto».";
+    texto.hidden = false;
+  }
+}
+
 function escanearQr(ev) {
   const archivo = ev.target.files && ev.target.files[0];
   ev.target.value = "";
   if (!archivo) return;
   const img = new Image();
   img.onload = function () {
+    const MAX = 1280;
+    const s = Math.min(1, MAX / Math.max(img.width, img.height));
     const l = document.createElement("canvas");
-    l.width = img.width;
-    l.height = img.height;
+    l.width = Math.max(1, Math.round(img.width * s));
+    l.height = Math.max(1, Math.round(img.height * s));
     const ctx = l.getContext("2d");
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0, l.width, l.height);
     let datos = null;
     try { datos = ctx.getImageData(0, 0, l.width, l.height); } catch (e) { datos = null; }
     if (datos) {
@@ -1244,9 +1325,22 @@ async function consultarActualizacion() {
   };
 }
 
-function hayNovedad(info) {
-  return !!info && !!info.nueva &&
-    (info.hay !== undefined ? !!info.hay : versionMayor(info.actual, info.nueva));
+const CLAVE_SIN_NOVEDAD = "bitacorabee_sin_novedad";
+
+function novedadDescartada(nueva) {
+  try { return localStorage.getItem(CLAVE_SIN_NOVEDAD) === nueva; } catch (e) { return false; }
+}
+
+function descartarNovedad(nueva) {
+  try { localStorage.setItem(CLAVE_SIN_NOVEDAD, nueva); } catch (e) { /* sin almacenamiento */ }
+}
+
+function hayNovedad(info, forzar) {
+  if (!info || !info.nueva || !info.actual) return false;
+  const hay = info.hay !== undefined ? !!info.hay : versionMayor(info.actual, info.nueva);
+  if (!hay) return false;
+  if (forzar) return true;
+  return !novedadDescartada(info.nueva);
 }
 
 function mostrarBannerActualizacion(info) {
@@ -1270,7 +1364,7 @@ async function comprobarActualizacionManual() {
   try {
     const info = await consultarActualizacion();
     infoActualizacion = info;
-    if (hayNovedad(info)) {
+    if (hayNovedad(info, true)) {
       mostrarBannerActualizacion(info);
       estado(`Hay una versión nueva: v${info.nueva}.`);
     } else {
@@ -1381,7 +1475,9 @@ function enlazarFormulario() {
   $("btn-guardar-sync").addEventListener("click", guardarDireccionSync);
   $("btn-usar-este-aparato").addEventListener("click", usarEsteAparatoComoServidor);
   $("btn-mostrar-qr").addEventListener("click", mostrarQrEnOrdenador);
-  $("btn-escanear-qr").addEventListener("click", () => $("file-esc-qr").click());
+  $("btn-escanear-qr").addEventListener("click", escanearConCamara);
+  $("btn-detener-esc").addEventListener("click", detenerEscaneoCamara);
+  $("btn-esc-foto").addEventListener("click", () => $("file-esc-qr").click());
   $("file-esc-qr").addEventListener("change", escanearQr);
   $("modal-usuarios").addEventListener("click", (ev) => {
     if (ev.target === $("modal-usuarios")) cerrarModalUsuarios();
@@ -1391,6 +1487,7 @@ function enlazarFormulario() {
   $("btn-banner-actualizar").addEventListener("click", aplicarActualizacion);
   $("btn-banner-cerrar").addEventListener("click", () => {
     $("banner-act").hidden = true;
+    if (infoActualizacion && infoActualizacion.nueva) descartarNovedad(infoActualizacion.nueva);
   });
 
   $("btn-credenciales").addEventListener("click", () => { $("modal-credenciales").hidden = false; });

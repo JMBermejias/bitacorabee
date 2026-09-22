@@ -17,6 +17,10 @@
             <application xmlns:android="http://schemas.android.com/apk/res/android"
                 android:usesCleartextTraffic="true" />
         </edit-config>
+        <edit-config file="AndroidManifest.xml" mode="merge" target="/manifest">
+            <uses-permission xmlns:android="http://schemas.android.com/apk/res/android"
+                android:name="android.permission.CAMERA" />
+        </edit-config>
         <icon density="mdpi" src="res/icon/android/icon-48-mdpi.png" />
         <icon density="hdpi" src="res/icon/android/icon-72-hdpi.png" />
         <icon density="xhdpi" src="res/icon/android/icon-96-xhdpi.png" />

@@ -492,6 +492,14 @@ textarea { resize: vertical; min-height: 74px; }
 }
 .qr-zona { margin-top: 14px; }
 .qr-botones { display: flex; gap: 10px; flex-wrap: wrap; }
+#qr-camara {
+  width: 100%;
+  max-height: 320px;
+  background: #000;
+  border-radius: 10px;
+  margin: 12px 0 4px;
+}
+#qr-camara-zona { margin-top: 4px; }
 .qr-canvas {
   display: inline-block;
   background: #fff;
