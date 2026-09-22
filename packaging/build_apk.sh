@@ -28,6 +28,7 @@ mkdir -p cordova-build/www "$DIST"
 
 cp "$APP"/index.html "$APP"/app.js "$APP"/styles.css cordova-build/www/
 cp -r "$APP"/vendor cordova-build/www/vendor
+cp -r "$APP"/packaging/cordova/res cordova-build/res
 printf '\nwindow.BITACORA_VERSION = "%s";\n' "$VERSION" >> cordova-build/www/app.js
 sed -e "s/@VERSION@/$VERSION/" cordova/config.xml > cordova-build/config.xml
 
